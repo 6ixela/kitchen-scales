@@ -1,7 +1,7 @@
 #ifndef LCD_H
 #define LCD_H
 
-#include "driver/gpio.h"
+#include <driver/gpio.h>
 #include <sys/lock.h>
 
 #define LCD_ROWS 2

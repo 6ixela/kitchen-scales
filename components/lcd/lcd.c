@@ -4,9 +4,11 @@
 #include "esp_system.h"
 #include "sys/lock.h"
 #include "lcd.h"
+#include "esp_rom_sys.h"
 
 // Delay in microseconds
-#define LCD_DELAY_US(us) ets_delay_us(us)
+#define LCD_DELAY_US(us) esp_rom_delay_us(us)
+
 
 // Commands
 #define LCD_CMD_CLEAR_DISPLAY 0x01
