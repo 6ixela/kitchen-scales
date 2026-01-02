@@ -10,6 +10,7 @@ typedef struct autotest_t
 {
     led_t led1;
     led_t led2;
+    buzzer_t buzzer;
     button_t button1;
     button_t button2;
 } autotest_t;

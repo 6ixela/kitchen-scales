@@ -1,5 +1,5 @@
-#ifndef BUTTON_H
-#define BUTTON_H
+#ifndef BUZZER_H
+#define BUZZER_H
 
 #include "driver/gpio.h"
 #include <sys/lock.h>
@@ -15,4 +15,4 @@ void buzzer_init(buzzer_t* buzzer, gpio_num_t pin);
 void buzzer_on(buzzer_t* buzzer);
 void buzzer_off(buzzer_t* buzzer);
 
-#endif /* !BUTTON_H */
+#endif /* !BUZZER_H */
