@@ -3,7 +3,6 @@
 
 #include "led.h"
 #include "button.h"
-
 #include "buzzer.h"
 
 typedef struct autotest_t
