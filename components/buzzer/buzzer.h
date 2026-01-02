@@ -1,7 +1,7 @@
 #ifndef BUTTON_H
 #define BUTTON_H
 
-#include <driver/gpio.h>
+#include "driver/gpio.h"
 #include <sys/lock.h>
 
 typedef struct buzzer_t
