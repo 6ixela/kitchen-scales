@@ -1,12 +1,14 @@
 #include "buzzer.h"
+
+#include <sys/lock.h>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include <sys/lock.h>
 
 #define OFF 0
 #define ON 1
 
-void buzzer_init(buzzer_t* buzzer, gpio_num_t pin)
+void buzzer_init(buzzer_t *buzzer, gpio_num_t pin)
 {
     buzzer->pin = pin;
     buzzer->state = OFF;
@@ -14,7 +16,7 @@ void buzzer_init(buzzer_t* buzzer, gpio_num_t pin)
     _lock_init(&buzzer->mutex);
 }
 
-void buzzer_on(buzzer_t* buzzer)
+void buzzer_on(buzzer_t *buzzer)
 {
     _lock_acquire(&buzzer->mutex);
     buzzer->state = ON;
@@ -22,7 +24,7 @@ void buzzer_on(buzzer_t* buzzer)
     _lock_release(&buzzer->mutex);
 }
 
-void buzzer_off(buzzer_t* buzzer)
+void buzzer_off(buzzer_t *buzzer)
 {
     _lock_acquire(&buzzer->mutex);
     buzzer->state = OFF;

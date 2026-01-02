@@ -1,8 +1,8 @@
+#include "autotest.h"
+#include "button.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "button.h"
 #include "led.h"
-#include "autotest.h"
 
 void app_main(void)
 {
@@ -32,7 +32,6 @@ void app_main(void)
     {
         startAutoTest(&componants);
         vTaskDelay(1000 / portTICK_PERIOD_MS);
-        
     }
     // while (1)
     // {

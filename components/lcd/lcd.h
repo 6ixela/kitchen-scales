@@ -1,7 +1,6 @@
 #ifndef LCD_H
 #define LCD_H
 
-
 #include <driver/gpio.h>
 #include <sys/lock.h>
 

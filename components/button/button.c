@@ -1,9 +1,11 @@
 #include "button.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+
 #include <sys/lock.h>
 
-void button_init(button_t* button, gpio_num_t pin)
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+void button_init(button_t *button, gpio_num_t pin)
 {
     button->pin = pin;
     button->is_pressed = 0;
@@ -12,7 +14,7 @@ void button_init(button_t* button, gpio_num_t pin)
     _lock_init(&button->mutex);
 }
 
-void button_update_state(button_t* button)
+void button_update_state(button_t *button)
 {
     _lock_acquire(&button->mutex);
     uint8_t read1 = gpio_get_level(button->pin);
@@ -25,7 +27,7 @@ void button_update_state(button_t* button)
     _lock_release(&button->mutex);
 }
 
-uint8_t button_is_pressed(button_t* button)
+uint8_t button_is_pressed(button_t *button)
 {
     _lock_acquire(&button->mutex);
     uint8_t pressed = button->is_pressed;

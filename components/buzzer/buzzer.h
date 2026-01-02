@@ -1,8 +1,9 @@
 #ifndef BUZZER_H
 #define BUZZER_H
 
-#include "driver/gpio.h"
 #include <sys/lock.h>
+
+#include "driver/gpio.h"
 
 typedef struct buzzer_t
 {
@@ -11,8 +12,8 @@ typedef struct buzzer_t
     _lock_t mutex;
 } buzzer_t;
 
-void buzzer_init(buzzer_t* buzzer, gpio_num_t pin);
-void buzzer_on(buzzer_t* buzzer);
-void buzzer_off(buzzer_t* buzzer);
+void buzzer_init(buzzer_t *buzzer, gpio_num_t pin);
+void buzzer_on(buzzer_t *buzzer);
+void buzzer_off(buzzer_t *buzzer);
 
 #endif /* !BUZZER_H */

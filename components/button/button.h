@@ -1,8 +1,9 @@
 #ifndef BUTTON_H
 #define BUTTON_H
 
-#include "driver/gpio.h"
 #include <sys/lock.h>
+
+#include "driver/gpio.h"
 
 typedef struct button_t
 {
@@ -11,8 +12,8 @@ typedef struct button_t
     _lock_t mutex;
 } button_t;
 
-void button_init(button_t* button, gpio_num_t pin);
-uint8_t button_is_pressed(button_t* button);
-void button_update_state(button_t* button);
+void button_init(button_t *button, gpio_num_t pin);
+uint8_t button_is_pressed(button_t *button);
+void button_update_state(button_t *button);
 
 #endif /* !BUTTON_H */

@@ -1,11 +1,10 @@
 #include "autotest.h"
 
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_log.h"
 
 #define SECONDS (1000 / portTICK_PERIOD_MS)
-
 
 static const char *TAG = "autotest";
 
@@ -22,7 +21,6 @@ static void startLcdTest(autotest_t *componants)
 static void startBuzzerTest(autotest_t *componants)
 {
     ESP_LOGI(TAG, "Buzzer test");
-
 }
 
 static void startButtonTest(autotest_t *componants)
@@ -36,7 +34,6 @@ static void startPressureTest(autotest_t *componants)
     ESP_LOGI(TAG, "Pressure test");
     // TODO: timeout de 10sec
 }
-
 
 void startAutoTest(autotest_t *componants)
 {

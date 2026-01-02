@@ -1,9 +1,9 @@
 #ifndef AUTOTEST_H
 #define AUTOTEST_H
 
-#include "led.h"
 #include "button.h"
 #include "buzzer.h"
+#include "led.h"
 
 typedef struct autotest_t
 {
