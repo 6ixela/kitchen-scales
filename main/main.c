@@ -21,10 +21,11 @@ void app_main(void)
     led_init(&led2, GPIO_NUM_33);
 
     autotest_t componants = {
-        .button1 = button1,
-        .button2 = button2,
-        .led1 = led1,
-        .led2 = led2,
+        .button1 = &button1,
+        .button2 = &button2,
+        .buzzer = NULL,
+        .led1 = &led1,
+        .led2 = &led2,
     };
 
     while (1)

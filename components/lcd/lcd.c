@@ -82,7 +82,7 @@ void lcd_print(lcd_t *lcd, const char *str)
     _lock_acquire(&lcd->mutex);
     while (*str)
     {
-        lcd_print_char(lcd, *str++);
+        lcd_data(*str++);
     }
     _lock_release(&lcd->mutex);
 }
