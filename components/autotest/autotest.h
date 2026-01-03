@@ -4,6 +4,7 @@
 #include "button.h"
 #include "buzzer.h"
 #include "led.h"
+#include "lcd.h"
 
 typedef struct autotest_t
 {
@@ -12,6 +13,7 @@ typedef struct autotest_t
     buzzer_t *buzzer;
     button_t *button1;
     button_t *button2;
+    lcd_t *lcd;
 } autotest_t;
 
 void startAutoTest(autotest_t *componants);

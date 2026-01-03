@@ -10,11 +10,24 @@ static const char *TAG = "autotest";
 
 static void startLedTest(autotest_t *componants)
 {
+    const char* lcd_screen = "Test des LEDs";
+    const char* second_line = "D1 et D6";
+    
+    // TODO
+    // lcd_print(componants->lcd, NULL);
+
     ESP_LOGI(TAG, "Led test");
+    led_blink(componants->led1, 5, 500);
+    vTaskDelay(1 * SECONDS);
+    led_blink(componants->led1, 5, 500);
+
 }
 
 static void startLcdTest(autotest_t *componants)
 {
+    const char* first_line = "EPITA  2025/2026";
+    const char* second_line = "VASSEUR,JOUY,OLIVER";
+    //
     ESP_LOGI(TAG, "Ldc test");
 }
 
