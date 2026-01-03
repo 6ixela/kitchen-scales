@@ -16,6 +16,8 @@ static void startLedTest(autotest_t *componants)
     // TODO
     // lcd_print(componants->lcd, NULL);
 
+    led_off(componants->led1);
+    led_off(componants->led2);
     ESP_LOGI(TAG, "Led test");
     led_blink(componants->led1, 5, 500);
     vTaskDelay(1 * SECONDS);
@@ -33,6 +35,8 @@ static void startLcdTest(autotest_t *componants)
 
 static void startBuzzerTest(autotest_t *componants)
 {
+    buzzer_off(componants->buzzer);
+    buzzer_blink(componants->buzzer, 5, 500);
     ESP_LOGI(TAG, "Buzzer test");
 }
 

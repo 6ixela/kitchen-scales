@@ -13,6 +13,8 @@
 
 #define LCD_ADDR 0x3E
 
+static char lcd_buffer[LCD_ROWS * LCD_COLS];
+
 void i2c_init(void)
 {
     i2c_config_t conf = {

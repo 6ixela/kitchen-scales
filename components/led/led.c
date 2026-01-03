@@ -2,11 +2,14 @@
 
 #include <sys/lock.h>
 
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 #define OFF 0
 #define ON 1
+
+static const char *TAG = "Led";
 
 void led_init(led_t *led, gpio_num_t pin)
 {
@@ -60,8 +63,10 @@ void led_blink(led_t *led, uint32_t times, uint32_t delay_ms)
 {
     for (uint32_t i = 0; i < times; i++)
     {
+        ESP_LOGI(TAG, "ON");
         led_toggle(led);
         vTaskDelay(delay_ms / portTICK_PERIOD_MS);
+        ESP_LOGI(TAG, "OFF");
         led_toggle(led);
         vTaskDelay(delay_ms / portTICK_PERIOD_MS);
     }
