@@ -18,7 +18,7 @@ void button_update_state(button_t *button)
 {
     _lock_acquire(&button->mutex);
     uint8_t read1 = gpio_get_level(button->pin);
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
     uint8_t read2 = gpio_get_level(button->pin);
     if (read1 == read2)
     {
@@ -29,8 +29,7 @@ void button_update_state(button_t *button)
 
 uint8_t button_is_pressed(button_t *button)
 {
-    _lock_acquire(&button->mutex);
+    button_update_state(button);
     uint8_t pressed = button->is_pressed;
-    _lock_release(&button->mutex);
     return pressed;
 }

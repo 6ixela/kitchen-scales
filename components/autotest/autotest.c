@@ -3,6 +3,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <stdint.h>
 
 #define SECONDS (1000 / portTICK_PERIOD_MS)
 
@@ -10,9 +11,9 @@ static const char *TAG = "autotest";
 
 static void startLedTest(autotest_t *componants)
 {
-    const char* lcd_screen = "Test des LEDs";
-    const char* second_line = "D1 et D6";
-    
+    const char *lcd_screen = "Test des LEDs";
+    const char *second_line = "D1 et D6";
+
     // TODO
     // lcd_print(componants->lcd, NULL);
 
@@ -22,13 +23,12 @@ static void startLedTest(autotest_t *componants)
     led_blink(componants->led1, 5, 500);
     vTaskDelay(1 * SECONDS);
     led_blink(componants->led1, 5, 500);
-
 }
 
 static void startLcdTest(autotest_t *componants)
 {
-    const char* first_line = "EPITA  2025/2026";
-    const char* second_line = "VASSEUR,JOUY,OLIVER";
+    const char *first_line = "EPITA  2025/2026";
+    const char *second_line = "VASSEUR,JOUY,OLIVER";
     //
     ESP_LOGI(TAG, "Ldc test");
 }
@@ -40,9 +40,39 @@ static void startBuzzerTest(autotest_t *componants)
     ESP_LOGI(TAG, "Buzzer test");
 }
 
+static void ButtonTest(button_t *button)
+{
+    TickType_t start_time = xTaskGetTickCount();
+    const TickType_t timeout = pdMS_TO_TICKS(10000);
+    uint8_t is_pressed = 0;
+
+    while ((xTaskGetTickCount() - start_time) < timeout)
+    {
+        if (button_is_pressed(button))
+        {
+            ESP_LOGI(TAG, "Button test");
+            is_pressed = 1;
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    if (is_pressed)
+    {
+        ESP_LOGI(TAG, "Touche OK");
+    }
+    else
+    {
+        ESP_LOGI(TAG, "Touche KO");
+    }
+}
+
 static void startButtonTest(autotest_t *componants)
 {
-    ESP_LOGI(TAG, "Button test");
+    ESP_LOGI(TAG, "Button1 test");
+    ButtonTest(componants->button1);
+    ESP_LOGI(TAG, "Button2 test");
+    ButtonTest(componants->button2);
     // TODO: timeout de 10sec
 }
 
