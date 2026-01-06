@@ -13,6 +13,11 @@ static void startLedTest(autotest_t *componants)
 {
     const char *lcd_screen = "Test des LEDs";
     const char *second_line = "D1 et D6";
+    lcd_set_cursor(componants->lcd, 0, 0);
+    lcd_print(componants->lcd, lcd_screen);
+    lcd_set_cursor(componants->lcd, 1, 0);
+    lcd_print(componants->lcd, second_line);
+    lcd_set_cursor(componants->lcd, 0, 0);
 
     // TODO
     // lcd_print(componants->lcd, NULL);
@@ -22,21 +27,26 @@ static void startLedTest(autotest_t *componants)
     ESP_LOGI(TAG, "Led test");
     led_blink(componants->led1, 5, 500);
     vTaskDelay(1 * SECONDS);
-    led_blink(componants->led1, 5, 500);
+    led_blink(componants->led2, 5, 500);
 }
 
 static void startLcdTest(autotest_t *componants)
 {
     const char *first_line = "EPITA  2025/2026";
-    const char *second_line = "VASSEUR,JOUY,OLIVER";
-    //
+    const char *second_line = "VASSEUR,JOUY";
+    lcd_set_cursor(componants->lcd, 0, 0);
+    lcd_print(componants->lcd, first_line);
+    lcd_set_cursor(componants->lcd, 1, 0);
+    vTaskDelay(2 * SECONDS);
+    lcd_print(componants->lcd, second_line);
+    vTaskDelay(2 * SECONDS);
     ESP_LOGI(TAG, "Ldc test");
 }
 
 static void startBuzzerTest(autotest_t *componants)
 {
     buzzer_off(componants->buzzer);
-    buzzer_blink(componants->buzzer, 5, 500);
+    // buzzer_blink(componants->buzzer, 5, 500);
     ESP_LOGI(TAG, "Buzzer test");
 }
 
