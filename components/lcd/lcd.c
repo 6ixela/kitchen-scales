@@ -5,6 +5,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "sys/lock.h"
+#include <string.h>
+#include <stdio.h>
+#include <stdint.h>
 
 #define I2C_MASTER_SCL_IO 27
 #define I2C_MASTER_SDA_IO 14
@@ -14,6 +17,8 @@
 #define LCD_ADDR 0x3E
 #define LCD_CMD  0x80
 #define LCD_DATA 0x40
+
+#define MILLISEC (1 / portTICK_PERIOD_MS)
 
 static char lcd_buffer[LCD_ROWS * LCD_COLS];
 
@@ -58,8 +63,8 @@ void lcd_data(uint8_t data)
 
 void lcd_set_cursor(lcd_t *lcd, uint8_t row, uint8_t col)
 {
-    uint8_t row_offsets[] = {0x00, 0x40};
-    lcd_cmd(0x80 | (col + row_offsets[row]));
+    uint8_t row_offsets[] = {0x00, LCD_DATA};
+    lcd_cmd(LCD_CMD | (col + row_offsets[row]));
 }
 
 void lcd_init(lcd_t *lcd)
@@ -90,12 +95,96 @@ void lcd_clear(lcd_t *lcd)
     _lock_release(&lcd->mutex);
 }
 
+static void fill_buffer(const char *str)
+{
+    for (size_t i = 0; i < 16; i++)
+    {
+        if (*str == 0 || *str == '\n')
+        {
+            lcd_buffer[i] = ' ';
+        }
+        else
+        {
+            lcd_buffer[i] = *str;
+            str++;
+        }
+    }
+    for (size_t i = 16; i < 32; i++)
+    {
+        if (*str == 0 || *str == '\n')
+        {
+            lcd_buffer[i] = ' ';
+        }
+        else
+        {
+            lcd_buffer[i] = *str;
+            str++;
+        }
+    }
+}
+
 void lcd_print(lcd_t *lcd, const char *str)
 {
     _lock_acquire(&lcd->mutex);
-    while (*str)
+    fill_buffer(str);
+    for (size_t i = 0; i < 32; i++)
     {
-        lcd_data(*str++);
+        lcd_data(lcd_buffer[i]);
     }
+    
     _lock_release(&lcd->mutex);
+}
+
+static void move_buffer(uint8_t move_top)
+{
+    if (move_top)
+    {
+        for (int i = 0; i < 15 ; i++)
+        {
+            lcd_buffer[i] = lcd_buffer[i + 1];
+        }
+    }
+    for (size_t i = 31; i > 16; i--)
+    {
+        lcd_buffer[i] = lcd_buffer[i - 1];
+    }
+}
+
+static void print_buff()
+{
+    for (size_t i = 0; i < 32; i++)
+    {
+        putchar(lcd_buffer[i]);
+    }
+    putchar('\n');
+}
+
+void lcd_defil_name(lcd_t *lcd, const char *top, const char *bottom)
+{
+    memset(lcd_buffer, ' ', LCD_COLS * LCD_ROWS);
+    int16_t i = 15;
+    int16_t j = 16;
+    int16_t bottom_len = strlen(bottom);
+    uint8_t move_top = 1;
+    for (int16_t tmp = 0; tmp < bottom_len; tmp++)
+    {
+        move_buffer(move_top);
+        if (tmp < 16)
+        {
+            lcd_buffer[i] = *top++;
+        }
+        move_top = tmp < 15;
+        lcd_buffer[j] = bottom[bottom_len - tmp - 1];
+        lcd_print(lcd, lcd_buffer);
+        print_buff();
+        vTaskDelay(500 * MILLISEC);
+    }
+    for (size_t i = 0; i < 16; i++)
+    {
+        move_buffer(move_top);
+        lcd_buffer[j] = ' ';
+        lcd_print(lcd, lcd_buffer);
+        print_buff();
+        vTaskDelay(500 * MILLISEC);
+    }
 }

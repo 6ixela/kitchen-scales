@@ -2,33 +2,26 @@
 #include "button.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "led.h"
 #include "lcd.h"
+#include "led.h"
+#include "pressure.h"
 
 void app_main(void)
 {
-    // Initialize button on GPIO 0 (assuming pull-up, active low)
     button_t button1;
     button_init(&button1, GPIO_NUM_33);
     button_t button2;
     button_init(&button2, GPIO_NUM_32);
-
     lcd_t lcd;
     lcd_init(&lcd);
-    
-    // Initialize LED controlled by buzzer on GPIO 32
     led_t led1;
     led_init(&led1, GPIO_NUM_22);
-    
-
-    // Initialize blinking LED on GPIO 33
     led_t led2;
     led_init(&led2, GPIO_NUM_23);
-
     buzzer_t buzzer;
     buzzer_init(&buzzer, GPIO_NUM_18);
-
-
+    pressure_t pressure_sensor;
+    pressure_init();
 
     autotest_t componants = {
         .button1 = &button1,
@@ -37,6 +30,7 @@ void app_main(void)
         .led1 = &led1,
         .led2 = &led2,
         .lcd = &lcd,
+        .pressure = &pressure_sensor,
     };
 
     while (1)

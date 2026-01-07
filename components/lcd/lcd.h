@@ -17,5 +17,6 @@ void lcd_set_cursor(lcd_t *lcd, uint8_t row, uint8_t col);
 void lcd_init(lcd_t *lcd);
 void lcd_clear(lcd_t *lcd);
 void lcd_print(lcd_t *lcd, const char *str);
+void lcd_defil_name(lcd_t *lcd, const char *top, const char *bottom);
 
 #endif /* LCD_H */
