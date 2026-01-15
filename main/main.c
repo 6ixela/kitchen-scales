@@ -1,19 +1,23 @@
-#include "autotest.h"
-#include "button.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "driver/i2c.h"
+#include "esp_log.h"
+
 #include "lcd.h"
 #include "led.h"
+#include "buzzer.h"
 #include "pressure.h"
+#include "button.h"
+#include "autotest.h"
 
 void app_main(void)
 {
+    lcd_t lcd;
+    lcd_init(&lcd);
     button_t button1;
     button_init(&button1, GPIO_NUM_33);
     button_t button2;
     button_init(&button2, GPIO_NUM_32);
-    lcd_t lcd;
-    lcd_init(&lcd);
     led_t led1;
     led_init(&led1, GPIO_NUM_22);
     led_t led2;
@@ -61,3 +65,4 @@ void app_main(void)
     //     vTaskDelay(500 / portTICK_PERIOD_MS);
     // }
 }
+

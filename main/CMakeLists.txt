@@ -1,3 +1,3 @@
 idf_component_register(SRCS "main.c"
                        INCLUDE_DIRS "."
-                       REQUIRES button led autotest lcd)
+                       REQUIRES button led autotest lcd pressure button autotest)

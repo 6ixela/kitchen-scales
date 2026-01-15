@@ -32,13 +32,6 @@ static void startLcdTest(autotest_t *componants)
     const char *first_line = "EPITA  2025/2026";
     const char *second_line = "VASSEUR,JOUY,OLIVER";
     lcd_defil_name(componants->lcd, first_line, second_line);
-    
-    lcd_set_cursor(componants->lcd, 0, 0);
-    lcd_print(componants->lcd, first_line);
-    lcd_set_cursor(componants->lcd, 1, 0);
-    vTaskDelay(2 * SECONDS);
-    lcd_print(componants->lcd, second_line);
-    vTaskDelay(2 * SECONDS);
     ESP_LOGI(TAG, "Ldc test");
 }
 
@@ -87,13 +80,18 @@ static void startButtonTest(autotest_t *componants)
 static void startPressureTest(autotest_t *componants)
 {
     ESP_LOGI(TAG, "Pressure test");
+    for (size_t i = 0; i < 10; i++)
+    {
+        int raw = pressure_read_raw();
+        float v = pressure_read_voltage();
+        float p = pressure_read_pressure();
+    
+        printf("ADC=%d | V=%.2fV | P=%.1f kPa\n", raw, v, p);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        /* code */
+    }
+    
     // fill les valeur pour avoir une valeur de base
-    int raw = pressure_read_raw();
-    float v = pressure_read_voltage();
-    float p = pressure_read_pressure();
-
-    printf("ADC=%d | V=%.2fV | P=%.1f kPa\n", raw, v, p);
-    vTaskDelay(pdMS_TO_TICKS(1000));
     // TODO: timeout de 10sec
 }
 
