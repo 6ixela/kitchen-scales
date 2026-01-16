@@ -11,8 +11,9 @@
 
 static const char *TAG = "Led";
 
-void led_init(led_t *led, gpio_num_t pin)
+void led_init(led_t *led, gpio_num_t pin, uint8_t id)
 {
+    led->id = id;
     led->pin = pin;
     led->state = OFF;
     gpio_set_direction(pin, GPIO_MODE_OUTPUT);

@@ -11,8 +11,9 @@
 
 static const char *TAG = "Buzzer";
 
-void buzzer_init(buzzer_t *buzzer, gpio_num_t pin)
+void buzzer_init(buzzer_t *buzzer, gpio_num_t pin, uint8_t id)
 {
+    buzzer->id = id;
     buzzer->pin = pin;
     buzzer->state = OFF;
     gpio_set_direction(pin, GPIO_MODE_OUTPUT);

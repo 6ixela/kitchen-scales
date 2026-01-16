@@ -2,17 +2,18 @@
 #define LED_H
 
 #include <sys/lock.h>
-
+#include <stdint.h>
 #include "driver/gpio.h"
 
 typedef struct led_t
 {
+    uint8_t id;
     gpio_num_t pin;
     uint8_t state;
     _lock_t mutex;
 } led_t;
 
-void led_init(led_t *led, gpio_num_t pin);
+void led_init(led_t *led, gpio_num_t pin, uint8_t id);
 void led_on(led_t *led);
 void led_off(led_t *led);
 void led_toggle(led_t *led);

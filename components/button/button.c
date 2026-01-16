@@ -5,8 +5,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-void button_init(button_t *button, gpio_num_t pin)
+void button_init(button_t *button, gpio_num_t pin, uint8_t id)
 {
+    button->id = id;
     button->pin = pin;
     button->is_pressed = 0;
     gpio_set_direction(pin, GPIO_MODE_INPUT);

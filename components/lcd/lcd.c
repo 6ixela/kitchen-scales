@@ -69,8 +69,9 @@ void lcd_set_cursor(lcd_t *lcd, uint8_t row, uint8_t col)
     lcd_cmd(LCD_CMD | (col + row_offsets[row]));
 }
 
-void lcd_init(lcd_t *lcd)
+void lcd_init(lcd_t *lcd, uint8_t id)
 {
+    lcd->id = id;
     _lock_init(&lcd->mutex);
     i2c_init();
     vTaskDelay(pdMS_TO_TICKS(50));

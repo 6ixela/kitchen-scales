@@ -9,7 +9,7 @@
 
 static esp_adc_cal_characteristics_t adc_chars;
 
-void pressure_init(void)
+void pressure_init(uint8_t id)
 {
     // Résolution ADC
     adc1_config_width(ADC_WIDTH);
