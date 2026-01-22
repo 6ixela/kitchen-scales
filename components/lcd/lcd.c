@@ -69,9 +69,10 @@ void lcd_set_cursor(lcd_t *lcd, uint8_t row, uint8_t col)
     lcd_cmd(LCD_CMD | (col + row_offsets[row]));
 }
 
-void lcd_init(lcd_t *lcd, uint8_t id)
+void lcd_init(lcd_t *lcd, uint8_t id, QueueHandle_t msg_q_lcd)
 {
     lcd->id = id;
+    lcd->msg_q_lcd = msg_q_lcd;
     _lock_init(&lcd->mutex);
     i2c_init();
     vTaskDelay(pdMS_TO_TICKS(50));
@@ -97,6 +98,15 @@ void lcd_clear(lcd_t *lcd)
     _lock_release(&lcd->mutex);
 }
 
+static void print_buff()
+{
+    for (size_t i = 0; i < 32; i++)
+    {
+        putchar(lcd_buffer[i]);
+    }
+    putchar('\n');
+}
+
 static void fill_buffer(const char *str)
 {
     for (size_t i = 0; i < 16; i++)
@@ -110,6 +120,10 @@ static void fill_buffer(const char *str)
             lcd_buffer[i] = *str;
             str++;
         }
+    }
+    if (*str == '\n')
+    {
+        str++;
     }
     for (size_t i = 16; i < 32; i++)
     {
@@ -129,6 +143,7 @@ void lcd_print(lcd_t *lcd, const char *str)
 {
     _lock_acquire(&lcd->mutex);
     fill_buffer(str);
+    lcd_set_cursor(lcd, 0, 0);
     for (size_t i = 0; i < 16; i++)
     {
         lcd_data(lcd_buffer[i]);
@@ -157,15 +172,6 @@ static void move_buffer(uint8_t move_top)
     }
 }
 
-static void print_buff()
-{
-    for (size_t i = 0; i < 32; i++)
-    {
-        putchar(lcd_buffer[i]);
-    }
-    putchar('\n');
-}
-
 void lcd_defil_name(lcd_t *lcd, const char *top, const char *bottom)
 {
     memset(lcd_buffer, ' ', LCD_COLS * LCD_ROWS);
@@ -183,8 +189,7 @@ void lcd_defil_name(lcd_t *lcd, const char *top, const char *bottom)
         move_top = tmp < 15;
         lcd_buffer[j] = bottom[bottom_len - tmp - 1];
         lcd_print(lcd, lcd_buffer);
-        print_buff();
-        vTaskDelay(2 * SECOND);
+        vTaskDelay(0.5 * SECOND);
     }
     for (size_t i = 0; i < 16; i++)
     {
@@ -192,6 +197,6 @@ void lcd_defil_name(lcd_t *lcd, const char *top, const char *bottom)
         lcd_buffer[j] = ' ';
         lcd_print(lcd, lcd_buffer);
         print_buff();
-        vTaskDelay(2 * SECOND);
+        vTaskDelay(0.5 * SECOND);
     }
 }

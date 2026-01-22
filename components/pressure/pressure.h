@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 #include "driver/gpio.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+
 
 typedef struct pressure_t
 {
@@ -10,12 +13,16 @@ typedef struct pressure_t
     gpio_num_t pin;
     uint32_t reset_val;
     _lock_t mutex;
+    QueueHandle_t msg_q_sensor;
 } pressure_t;
 
-void pressure_init(uint8_t id);
+void pressure_init(uint8_t id, QueueHandle_t msg_q_lcd);
 int pressure_read_raw(void);
 float pressure_read_voltage(void);
 float pressure_read_pressure(void);
+float pressure_read_weight(void);
+void pressure_calibrate(float v_100g, float v_1000g);
+void pressure_tare(void);
 
 
 #endif /* PRESSURE_H */

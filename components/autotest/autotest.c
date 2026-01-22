@@ -11,13 +11,9 @@ static const char *TAG = "autotest";
 
 static void startLedTest(autotest_t *componants)
 {
-    const char *lcd_screen = "Test des LEDs";
-    const char *second_line = "D1 et D6";
-    lcd_set_cursor(componants->lcd, 0, 0);
+    const char *lcd_screen = "Test des LEDs\nD1 et D6";
+    lcd_clear(componants->lcd);
     lcd_print(componants->lcd, lcd_screen);
-    lcd_set_cursor(componants->lcd, 1, 0);
-    lcd_print(componants->lcd, second_line);
-    lcd_set_cursor(componants->lcd, 0, 0);
 
     led_off(componants->led1);
     led_off(componants->led2);
@@ -37,6 +33,10 @@ static void startLcdTest(autotest_t *componants)
 
 static void startBuzzerTest(autotest_t *componants)
 {
+    const char *lcd_screen = "Test du Buzzer";
+    lcd_clear(componants->lcd);
+    lcd_set_cursor(componants->lcd, 0, 0);
+    lcd_print(componants->lcd, lcd_screen);
     buzzer_off(componants->buzzer);
     // buzzer_blink(componants->buzzer, 5, 500);
     ESP_LOGI(TAG, "Buzzer test");
@@ -71,28 +71,34 @@ static void ButtonTest(button_t *button)
 
 static void startButtonTest(autotest_t *componants)
 {
-    ESP_LOGI(TAG, "Button1 test");
+    const char *lcd_button = "Button1 test";
+    lcd_print(componants->lcd, lcd_button);
     ButtonTest(componants->button1);
-    ESP_LOGI(TAG, "Button2 test");
+    lcd_button = "Button2 test";
+    lcd_print(componants->lcd, lcd_button);
     ButtonTest(componants->button2);
 }
 
 static void startPressureTest(autotest_t *componants)
 {
-    ESP_LOGI(TAG, "Pressure test");
+    const char *lcd_screen = "Test du Capteur\nde Poids";
+    lcd_clear(componants->lcd);
+    lcd_print(componants->lcd, lcd_screen);
+    
+    ESP_LOGI(TAG, "Weight sensor test - Taring...");
+    pressure_tare();  // Zero reference at current weight
+    vTaskDelay(pdMS_TO_TICKS(500));
+    
+    ESP_LOGI(TAG, "Reading weight...");
     for (size_t i = 0; i < 10; i++)
     {
         int raw = pressure_read_raw();
         float v = pressure_read_voltage();
-        float p = pressure_read_pressure();
+        float w = pressure_read_weight();
     
-        printf("ADC=%d | V=%.2fV | P=%.1f kPa\n", raw, v, p);
+        printf("ADC=%d | V=%.2fV | W=%.1fg\n", raw, v, w);
         vTaskDelay(pdMS_TO_TICKS(1000));
-        /* code */
     }
-    
-    // fill les valeur pour avoir une valeur de base
-    // TODO: timeout de 10sec
 }
 
 void startAutoTest(autotest_t *componants)

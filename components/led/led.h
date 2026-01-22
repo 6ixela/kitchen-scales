@@ -3,6 +3,7 @@
 
 #include <sys/lock.h>
 #include <stdint.h>
+#include "freertos/FreeRTOS.h"
 #include "driver/gpio.h"
 
 typedef struct led_t

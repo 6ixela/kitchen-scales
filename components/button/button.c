@@ -4,8 +4,9 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 
-void button_init(button_t *button, gpio_num_t pin, uint8_t id)
+void button_init(button_t *button, gpio_num_t pin, uint8_t id, QueueHandle_t msg_q_sensor)
 {
     button->id = id;
     button->pin = pin;
@@ -13,6 +14,7 @@ void button_init(button_t *button, gpio_num_t pin, uint8_t id)
     gpio_set_direction(pin, GPIO_MODE_INPUT);
     gpio_set_pull_mode(pin, GPIO_PULLUP_ONLY);
     _lock_init(&button->mutex);
+    button->msg_q_sensor = msg_q_sensor;
 }
 
 void button_update_state(button_t *button)

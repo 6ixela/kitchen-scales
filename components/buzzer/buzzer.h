@@ -4,6 +4,9 @@
 #include <sys/lock.h>
 #include <stdint.h>
 #include "driver/gpio.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+
 
 typedef struct buzzer_t
 {
