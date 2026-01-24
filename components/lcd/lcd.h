@@ -25,5 +25,6 @@ void lcd_init(lcd_t *lcd, uint8_t id, QueueHandle_t msg_q_lcd);
 void lcd_clear(lcd_t *lcd);
 void lcd_print(lcd_t *lcd, const char *str);
 void lcd_defil_name(lcd_t *lcd, const char *top, const char *bottom);
+void lcd_task(void *args);
 
 #endif /* LCD_H */

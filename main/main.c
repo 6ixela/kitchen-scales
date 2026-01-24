@@ -46,10 +46,16 @@ void app_main(void)
         .pressure = &pressure_sensor,
     };
 
+    startAutoTest(&componants);
+    xTaskCreate(lcd_task, "lcd_task", 2048, &lcd, 5, NULL);
     while (1)
-
     {
-        startAutoTest(&componants);
+        msg_t msg = {
+            .id = 0,
+            .value = 12,
+        };
+        xQueueSend(msg_q_lcd, &msg, portMAX_DELAY);
+        
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
     // while (1)
