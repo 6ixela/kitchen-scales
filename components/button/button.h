@@ -21,5 +21,6 @@ typedef struct button_t
 void button_init(button_t *button, gpio_num_t pin, uint8_t id, QueueHandle_t msg_q_lcd);
 uint8_t button_is_pressed(button_t *button);
 void button_update_state(button_t *button);
+void button_task(void *args);
 
 #endif /* !BUTTON_H */

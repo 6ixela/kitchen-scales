@@ -5,6 +5,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "../../main/message.h"
 
 void button_init(button_t *button, gpio_num_t pin, uint8_t id, QueueHandle_t msg_q_sensor)
 {
@@ -35,4 +36,23 @@ uint8_t button_is_pressed(button_t *button)
     button_update_state(button);
     uint8_t pressed = button->is_pressed;
     return pressed;
+}
+
+void button_task(void *args)
+{
+    button_t *button = (button_t *)args;
+    msg_t msg;
+    uint8_t last_state = button->is_pressed;
+    while (1)
+    {
+        button_update_state(button);
+        if (button->is_pressed != last_state)
+        {
+            msg.id = button->id;
+            msg.value = button->is_pressed;
+            last_state = button->is_pressed;
+            xQueueSend(button->msg_q_sensor, &msg, portMAX_DELAY);
+        }
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+    }
 }

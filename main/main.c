@@ -48,15 +48,13 @@ void app_main(void)
 
     startAutoTest(&componants);
     xTaskCreate(lcd_task, "lcd_task", 2048, &lcd, 5, NULL);
+    xTaskCreate(button_task, "button1_task", 2048, &button1, 5, NULL);
+    xTaskCreate(button_task, "button2_task", 2048, &button2, 5, NULL);
+    msg_t msg;
     while (1)
     {
-        msg_t msg = {
-            .id = 0,
-            .value = 12,
-        };
+        xQueueReceive(msg_q_sensor, &msg, portMAX_DELAY);
         xQueueSend(msg_q_lcd, &msg, portMAX_DELAY);
-        
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
     // while (1)
     // {
