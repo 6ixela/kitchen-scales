@@ -21,8 +21,8 @@ void app_main(void)
     msg_q_lcd = xQueueCreate(20, sizeof(msg_t));
 
     uint8_t id = 0;
-    lcd_t lcd;
-    lcd_init(&lcd, id++, msg_q_lcd);
+    pressure_t pressure_sensor;
+    pressure_init(&pressure_sensor, id++, msg_q_sensor);
     button_t button1;
     button_init(&button1, GPIO_NUM_33, id++, msg_q_sensor);
     button_t button2;
@@ -33,8 +33,9 @@ void app_main(void)
     led_init(&led2, GPIO_NUM_23, id++);
     buzzer_t buzzer;
     buzzer_init(&buzzer, GPIO_NUM_18, id++);
-    pressure_t pressure_sensor;
-    pressure_init(id++, msg_q_sensor);
+
+    lcd_t lcd;
+    lcd_init(&lcd, id++, msg_q_lcd);
 
     autotest_t componants = {
         .button1 = &button1,
@@ -46,14 +47,30 @@ void app_main(void)
         .pressure = &pressure_sensor,
     };
 
-    startAutoTest(&componants);
+    // startAutoTest(&componants);
     xTaskCreate(lcd_task, "lcd_task", 2048, &lcd, 5, NULL);
     xTaskCreate(button_task, "button1_task", 2048, &button1, 5, NULL);
     xTaskCreate(button_task, "button2_task", 2048, &button2, 5, NULL);
+    xTaskCreate(pressure_task, "pressure_task", 2048, &pressure_sensor, 5, NULL);
     msg_t msg;
     while (1)
     {
         xQueueReceive(msg_q_sensor, &msg, portMAX_DELAY);
+        if (msg.id == button1.id)
+        {
+            buzzer_blink(&buzzer, 1, 100);
+            led_toggle(&led1);
+        }
+        else if (msg.id == button2.id)
+        {
+            buzzer_blink(&buzzer, 1, 100);
+            led_toggle(&led2);
+        }
+        else if (msg.id == pressure_sensor.id)
+        {
+            
+            // Process pressure sensor message if needed
+        }
         xQueueSend(msg_q_lcd, &msg, portMAX_DELAY);
     }
     // while (1)

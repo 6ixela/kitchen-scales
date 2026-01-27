@@ -42,7 +42,7 @@ static void startBuzzerTest(autotest_t *componants)
     ESP_LOGI(TAG, "Buzzer test");
 }
 
-static void ButtonTest(button_t *button)
+static void ButtonTest(autotest_t *componants, button_t *button)
 {
     TickType_t start_time = xTaskGetTickCount();
     const TickType_t timeout = pdMS_TO_TICKS(10000);
@@ -62,10 +62,13 @@ static void ButtonTest(button_t *button)
     if (is_pressed)
     {
         ESP_LOGI(TAG, "Touche OK");
+        lcd_print_line(componants->lcd, "Touche OK", 1);
     }
     else
     {
         ESP_LOGI(TAG, "Touche KO");
+        lcd_set_cursor(componants->lcd, 0, 0);
+        lcd_print_line(componants->lcd, "Touche KO", 1);
     }
 }
 
@@ -73,10 +76,10 @@ static void startButtonTest(autotest_t *componants)
 {
     const char *lcd_button = "Button1 test";
     lcd_print(componants->lcd, lcd_button);
-    ButtonTest(componants->button1);
+    ButtonTest(componants, componants->button1);
     lcd_button = "Button2 test";
     lcd_print(componants->lcd, lcd_button);
-    ButtonTest(componants->button2);
+    ButtonTest(componants, componants->button2);
 }
 
 static void startPressureTest(autotest_t *componants)

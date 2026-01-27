@@ -148,6 +148,23 @@ static void fill_buffer(const char *str)
     }
 }
 
+void lcd_print_line(lcd_t *lcd, const char *str, uint8_t line)
+{
+    _lock_acquire(&lcd->mutex);
+    lcd_set_cursor(lcd, line, 0);
+    for (size_t i = 0; i < 16; i++)
+    {
+        char c = str[i];
+        if (c == 0 || c == '\n')
+        {
+            c = ' ';
+        }
+        lcd_data(c);
+    }
+    lcd_set_cursor(lcd, line, 0);
+    _lock_release(&lcd->mutex);
+}
+
 void lcd_print(lcd_t *lcd, const char *str)
 {
     _lock_acquire(&lcd->mutex);
@@ -219,7 +236,18 @@ void lcd_task(void *args)
         if (xQueueReceive(lcd->msg_q_lcd, &msg, portMAX_DELAY) == pdTRUE)
         {
             ESP_LOGI("LCD", "Received message id: %d, value: %d", msg.id, msg.value);
-            lcd_print(lcd, to_print[msg.id]);
+            if (msg.id == 0)
+            {
+                char buffer[32];
+                memset(buffer, ' ', sizeof(buffer));
+                snprintf(buffer, sizeof(buffer), "Poids:\n %ld g", msg.value);
+                lcd_print(lcd, buffer);
+                continue;
+            }
+            else
+            {
+                lcd_print(lcd, to_print[msg.id]);
+            }            
         }
     }
 }

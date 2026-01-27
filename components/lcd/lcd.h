@@ -26,5 +26,6 @@ void lcd_clear(lcd_t *lcd);
 void lcd_print(lcd_t *lcd, const char *str);
 void lcd_defil_name(lcd_t *lcd, const char *top, const char *bottom);
 void lcd_task(void *args);
+void lcd_print_line(lcd_t *lcd, const char *str, uint8_t line);
 
 #endif /* LCD_H */
