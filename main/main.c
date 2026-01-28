@@ -53,25 +53,32 @@ void app_main(void)
     xTaskCreate(button_task, "button2_task", 2048, &button2, 5, NULL);
     xTaskCreate(pressure_task, "pressure_task", 2048, &pressure_sensor, 5, NULL);
     msg_t msg;
+    uint8_t veille_state = 1;
     while (1)
     {
         xQueueReceive(msg_q_sensor, &msg, portMAX_DELAY);
         if (msg.id == button1.id)
         {
+            if (msg.value == 1)
+            {
+                veille_state = !veille_state;
+            }
             buzzer_blink(&buzzer, 1, 100);
-            led_toggle(&led1);
+            led_toggle(&led2);
+            xQueueSend(msg_q_lcd, &msg, portMAX_DELAY);
+            continue;
         }
         else if (msg.id == button2.id)
         {
+            pressure_tare();
             buzzer_blink(&buzzer, 1, 100);
-            led_toggle(&led2);
+            led_toggle(&led1);
         }
-        else if (msg.id == pressure_sensor.id)
+        if (veille_state)
         {
-            
-            // Process pressure sensor message if needed
+            xQueueSend(msg_q_lcd, &msg, portMAX_DELAY);
         }
-        xQueueSend(msg_q_lcd, &msg, portMAX_DELAY);
+        
     }
     // while (1)
     // {
