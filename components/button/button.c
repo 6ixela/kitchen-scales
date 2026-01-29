@@ -38,20 +38,38 @@ uint8_t button_is_pressed(button_t *button)
     return pressed;
 }
 
+
 void button_task(void *args)
 {
     button_t *button = (button_t *)args;
     msg_t msg;
     uint8_t last_state = button->is_pressed;
+    TickType_t press_start_time = 0;
+    const TickType_t LONG_PRESS_DURATION = pdMS_TO_TICKS(2000);  // 2 secondes
+    
     while (1)
     {
-        button_update_state(button);
+        button_update_state(button);        
         if (button->is_pressed != last_state)
         {
             msg.id = button->id;
             msg.value = button->is_pressed;
+            if (button->is_pressed == 1)
+            {
+                press_start_time = xTaskGetTickCount();
+                xQueueSend(button->msg_q_sensor, &msg, portMAX_DELAY);
+            }
+            else
+            {
+                TickType_t press_duration = xTaskGetTickCount() - press_start_time;
+                
+                if (press_duration >= LONG_PRESS_DURATION)
+                {
+                    
+                    xQueueSend(button->msg_q_sensor, &msg, portMAX_DELAY);
+                }
+            }
             last_state = button->is_pressed;
-            xQueueSend(button->msg_q_sensor, &msg, portMAX_DELAY);
         }
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }

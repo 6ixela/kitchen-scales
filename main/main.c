@@ -59,13 +59,13 @@ void app_main(void)
         xQueueReceive(msg_q_sensor, &msg, portMAX_DELAY);
         if (msg.id == button1.id)
         {
-            if (msg.value == 1)
+            if (msg.value == 0)
             {
+                buzzer_blink(&buzzer, 1, 100);
+                xQueueSend(msg_q_lcd, &msg, portMAX_DELAY);
                 veille_state = !veille_state;
             }
-            buzzer_blink(&buzzer, 1, 100);
             led_toggle(&led2);
-            xQueueSend(msg_q_lcd, &msg, portMAX_DELAY);
             continue;
         }
         else if (msg.id == button2.id)
