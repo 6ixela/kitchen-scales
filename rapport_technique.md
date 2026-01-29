@@ -222,130 +222,50 @@ Similaire aux LEDs, utilise le même modèle GPIO pour générer un signal sonor
 - **SCL :** GPIO27
 - **SDA :** GPIO14
 - **Adresse :** 0x3E (module LCD rétro-éclairé via I2C)
-- **Fréquence :** 100 kHz
 
-#### **Protocole de Communication**
-```c
-static esp_err_t lcd_write(uint8_t mode, uint8_t data) {
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (LCD_ADDR << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write_byte(cmd, mode, true);      // Mode: CMD ou DATA
-    i2c_master_write_byte(cmd, data, true);      // Données
-    i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(...);
-    i2c_cmd_link_delete(cmd);
-    return ret;
-}
-```
+#### **Étapes 2→4 : Conversion, Modèle de Jauge et Poids**
 
-#### **Tâche d'Affichage**
-```c
-void lcd_task(void *args) {
-    lcd_t *lcd = (lcd_t *)args;
-    msg_t msg;
-    
-    while (1) {
-        xQueueReceive(msg_q_lcd, &msg, portMAX_DELAY);
-        // Traitement et affichage en fonction du type de message
-    }
-}
-```
+Le code a été modifié pour effectuer la conversion ADC→tension puis estimer la résistance de la jauge et en déduire la force par un modèle de type "power-law" sur la résistance. La chaîne actuelle implémente les fonctions suivantes :
 
-**Avantage du découplage :** L'acquisition du capteur n'est pas bloquée par les délais I2C de l'écran.
+- `convert_adc_to_voltage(adc_raw)` : conversion linéaire simple de la valeur brute ADC vers une tension (utilise `V_REF` et `ADC_MAX_VALUE`).
+- `calculate_r_jauge(V_mesuree)` : calcul de la résistance de la jauge à partir de la tension mesurée en inverse du pont diviseur :
+  $$R_{jauge} = \frac{V_{mesuree} \cdot R_M}{V_{supply} - V_{mesuree}}$$
+- `calculate_force_from_r_jauge(R_jauge)` : inversion du modèle de jauge utilisé en calibration :
+  Si le modèle est donné par $R_{jauge} = a \cdot Force^{-b}$ alors
+  $$Force = \left(\frac{a}{R_{jauge}}\right)^{1/b}$$
 
----
+La fonction de haut niveau `get_final_weight_g()` :
 
-## Calculs de Pesage
+1. Moyenne des 10 dernières lectures brutes ADC.
+2. Conversion ADC → tension via `convert_adc_to_voltage()`.
+3. Calcul de `R_jauge` via `calculate_r_jauge()`.
+4. Calcul du poids brut via `calculate_force_from_r_jauge()`.
+5. Application d'un facteur et soustraction de l'offset de tarage (`CALIBRATION_OFFSET_G`).
 
-### 3.1 Chaîne de Conversion
-
-#### **Étape 1 : Lecture ADC Brute**
-```c
-int pressure_read_raw(void) {
-    int raw = 0;
-    adc2_get_raw(PRESSURE_ADC_CHANNEL, ADC_WIDTH, &raw);
-    return raw;  // 0-4095
-}
-```
-
-#### **Étape 2 : Conversion en Tension**
-```c
-float pressure_read_voltage(void) {
-    int raw = pressure_read_raw();
-    uint32_t mv = esp_adc_cal_raw_to_voltage(raw, &adc_chars);
-    return mv / 1000.0f;  // Résultat en volts
-}
-```
-
-La fonction `esp_adc_cal_raw_to_voltage()` utilise une table de calibrage interne à l'ESP32 (Vref ≈ 1.1V).
-
-#### **Étape 3 : Calibrage Logarithmique**
-La jauge de contrainte produit une relation non-linéaire. Un modèle **logarithmique à 4 points** est utilisé :
-
-$$\text{poids} = a \cdot \ln(V) + b$$
-
-où $a$ et $b$ sont déterminés par régression des moindres carrés sur 4 points de calibrage :
+Extrait simplifié :
 
 ```c
-void pressure_calibrate(float v_50g, float v_100g, float v_500g, float v_1000g) {
-    // Points de calibrage
-    float weights[4] = {50.0f, 100.0f, 500.0f, 1000.0f};
-    float voltages[4] = {v_50g, v_100g, v_500g, v_1000g};
-    
-    float sum_ln_v = 0.0f, sum_w = 0.0f;
-    float sum_ln_v_sq = 0.0f, sum_w_ln_v = 0.0f;
-    
-    // Accumulation des sums
-    for (int i = 0; i < 4; i++) {
-        if (voltages[i] <= 0.0f) return;
-        float ln_v = logf(voltages[i]);
-        sum_ln_v += ln_v;
-        sum_w += weights[i];
-        sum_ln_v_sq += ln_v * ln_v;
-        sum_w_ln_v += weights[i] * ln_v;
-    }
-    
-    // Formules des moindres carrés
-    float denominator = (4.0f * sum_ln_v_sq) - (sum_ln_v * sum_ln_v);
-    
-    if (denominator != 0.0f) {
-        log_a = ((4.0f * sum_w_ln_v) - (sum_w * sum_ln_v)) / denominator;
-        log_b = (sum_w - (log_a * sum_ln_v)) / 4.0f;
-        is_calibrated = true;
-    }
-}
+float V_mesuree = convert_adc_to_voltage(adc_average);
+float R_jauge  = calculate_r_jauge(V_mesuree);
+float weight_brut = calculate_force_from_r_jauge(R_jauge);
+float final_weight = weight_brut * 100 - CALIBRATION_OFFSET_G;
+if (final_weight < 0.0) final_weight = 0.0;
 ```
 
-#### **Étape 4 : Lecture du Poids**
-```c
-float pressure_read_weight(void) {
-    float v = pressure_read_voltage();
-    
-    if (!is_calibrated || v <= 0.0f)
-        return 0.0f;
-    
-    float weight = log_a * logf(v) + log_b;
-    
-    // Limitation de la plage
-    if (weight < 0.0f)      weight = 0.0f;
-    if (weight > 5000.0f)   weight = 5000.0f;
-    
-    return weight;  // en grammes
-}
+Remarques importantes :
+- Le modèle logarithmique décrit précédemment a été commenté dans le code et remplacé par le modèle basé sur la relation $R_{jauge} = a \cdot Force^{-b}$ (coefficients `CALIBRATION_COEF_A` et `CALIBRATION_COEF_B`).
+- Les valeurs de `V_SUPPLY` (4.8V), `R_M` (10 kOhm), `V_REF` (5V) et le multiplicateur `*100` appliqué au résultat proviennent de l'implémentation et doivent être validés lors de la calibration.
+- L'offset de tarage est stocké dans `CALIBRATION_OFFSET_G` (mémorisé en NVM dans l'application).
 ```
 
-### 3.2 Justification du Modèle Logarithmique
 
-Les jauges de contrainte (load cells) présentent une réponse suivant une courbe de type Power-Law ou logarithmique en fonction de la masse appliquée. Trois raisons justifient ce choix :
+### 3.2 Justification du Modèle
 
-| Modèle | Avantages | Inconvénients |
-|--------|-----------|---------------|
-| **Linéaire** | Simple, rapide | Erreur de ±10-20% sur étendue complète |
-| **Logarithmique** | Précision ±2-5%, adapté aux capteurs réels | Calcul logf() plus coûteux |
-| **Polynôme 3° ou LUT** | Très précis | Complexe, plus de calibrage |
+Les jauges de contrainte peuvent être modélisées par une relation non-linéaire entre la résistance et la force. Dans l'implémentation actuelle on utilise un modèle de type "power-law" sur la résistance :
 
-Pour une **balance de cuisine** (application de haute précision), la **précision de 2-5%** du modèle logarithmique est acceptable et surpasse nettement la linéarité.
+$$R_{jauge} = a \cdot Force^{-b}$$
+
+Ce modèle a été retenu car il s'inverse simplement pour obtenir `Force = (a / R_{jauge})^{1/b}` et s'adapte bien aux résultats expérimentaux après calibration. Alternatives possibles : modèle linéaire, polynôme d'ordre supérieur ou table de correspondance (LUT) — chacun a ses compromis entre complexité et précision.
 
 ### 3.3 Stabilité et Lissage
 
@@ -475,10 +395,6 @@ static void startPressureTest(autotest_t *componants) {
 - **Multitâche :** Chaque capteur s'exécute indépendamment sans bloquer les autres
 - **Intégration ESP-IDF :** FreeRTOS est le noyau natif d'ESP-IDF
 
-**Alternative rejetée :** Boucle de scrutation (polling) unique
-- ❌ Latence imprévisible
-- ❌ Impossible de paralléliser les acquisitions
-- ❌ Code monolithique
 
 ### 5.2 Queues de Messages vs Appels Directs
 
@@ -506,27 +422,40 @@ Apui + attente 50ms + deuxième lecture
 
 **Coût :** 50ms de latence négligeable pour des boutons.
 
-### 5.4 Calibrage Logarithmique
+### 5.4 Modèle Power-Law pour la Jauge de Contrainte
 
 **Justification mathématique :**
-La jauge de contrainte suit une équation de type :
 
-$$\text{Force} = k \cdot \ln\left(\frac{R(m)}{R_0}\right)$$
+La jauge de contrainte suit une relation empirique de type "power-law" entre la résistance et la force appliquée :
 
-où $R(m)$ est la résistance sous charge et $R_0$ la résistance initiale.
+$$R_{jauge} = a \cdot Force^{-b}$$
 
-La tension étant proportionnelle à la résistance (via pont de Wheatstone), on obtient :
+où $a$ (coefficient `CALIBRATION_COEF_A`, défaut 10000) et $b$ (coefficient `CALIBRATION_COEF_B`, défaut 0.7) sont déterminés lors de la calibration.
 
-$$V(m) \propto \ln(m)$$
+**Inversion du modèle :**
 
-d'où l'inverse :
+Pour estimer la force à partir de la résistance mesurée, on inverse l'équation :
 
-$$m \propto a \cdot \ln(V) + b$$
+$$Force = \left(\frac{a}{R_{jauge}}\right)^{1/b}$$
 
-**Validation empirique :**
-- 4 points de calibrage couvrent l'étendue 50-1000g
-- Régression aux moindres carrés minimise l'erreur quadratique
-- Plage linéaire extrapolée par clipping [0, 5000g]
+**Chaîne de conversion complète :**
+
+1. **ADC brut** (0–4095) → `convert_adc_to_voltage()` → **Tension mesurée** (V)
+2. **Tension mesurée** → `calculate_r_jauge()` via pont diviseur inverse → **Résistance jauge** (Ω)
+3. **Résistance jauge** → `calculate_force_from_r_jauge()` via inversion du modèle → **Poids brut**
+4. **Poids brut** × 100 − `CALIBRATION_OFFSET_G` → **Poids final** (g)
+
+**Avantages du modèle power-law :**
+- S'adapte bien aux courbes réelles des jauges de contrainte
+- Simple à inverser (une seule formule)
+- Facile à calibrer : mesurer la résistance à quelques points de référence et ajuster $a$ et $b$
+- Coefficients constants et mémorisables
+
+**Paramètres de calibration :**
+- `CALIBRATION_COEF_A` (défaut 10000) : coefficient de la courbe
+- `CALIBRATION_COEF_B` (défaut 0.7) : exposant de la courbe
+- `CALIBRATION_OFFSET_G` : offset de tarage mémorisé en NVM via `pressure_tare()`
+- Paramètres matériel : `V_SUPPLY` (4.8V), `R_M` (10 kΩ), `V_REF` (5V)
 
 ### 5.5 Taille des Buffers
 
@@ -548,9 +477,9 @@ xTaskCreate(pressure_task, "pressure_task", 2048, &pressure_sensor, 5, NULL);
 ```
 
 Toutes les tâches périphériques à **priorité 5** (identique).
-- ✅ Évite les inversions de priorité
-- ✅ FreeRTOS arbitre le scheduling équitablement
-- ✅ app_main contrôle la logique métier avec queue bloquante
+- Évite les inversions de priorité
+- FreeRTOS arbitre le scheduling équitablement
+- app_main contrôle la logique métier avec queue bloquante
 
 ### 5.7 Accumulation d'Énergie (Veille)
 
@@ -579,21 +508,16 @@ while (1) {
 ## Synthèse et Perspectives
 
 ### Points Forts de l'Architecture
-✅ **Modularité** : Chaque composant est indépendant et testable  
-✅ **Scalabilité** : Facile d'ajouter de nouveaux capteurs (queue + tâche)  
-✅ **Robustesse** : Dédoublement des lectures, calibrage adapté  
-✅ **Performance** : Pas de blocages critiques, latences prévisibles  
-✅ **Maintenabilité** : Code bien structuré, interfaces claires  
+**Modularité** : Chaque composant est indépendant et testable  
+**Scalabilité** : Facile d'ajouter de nouveaux capteurs (queue + tâche)  
+**Robustesse** : Dédoublement des lectures, calibrage adapté  
+**Performance** : Pas de blocages critiques, latences prévisibles  
+**Maintenabilité** : Code bien structuré, interfaces claires  
 
 ### Améliorations Futures Possibles
-- ⚙️ **Watchdog Timer** : Supervision des tâches pour éviter les blocages infinis
-- ⚙️ **Persistence NVM** : Mémorisation des paramètres de calibrage
-- ⚙️ **Interface Bluetooth** : Communication avec application mobile
-- ⚙️ **Gestion d'erreurs avancée** : Codes d'erreur I2C, ADC, etc.
-- ⚙️ **Histogramme de poids** : Enregistrement des dernières mesures
+- **Persistence NVM** : Mémorisation des paramètres de calibrage
 
 ---
 
 **Auteurs :** VASSEUR
 **Date :** 2025/2026  
-**Plateforme :** ESP32 - FreeRTOS - ESP-IDF v5.5

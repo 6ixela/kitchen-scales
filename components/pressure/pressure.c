@@ -22,11 +22,28 @@ static esp_adc_cal_characteristics_t adc_chars;
 static int32_t values[10] = {0};
 static size_t values_index = 0;
 // Calibration data for weight sensor (logarithmic)
-static float log_a = 0.0f;      // Logarithmic coefficient
-static float log_b = 0.0f;      // Logarithmic offset
-static bool is_calibrated = false;
+// static float log_a = 0.0f;      // Logarithmic coefficient
+// static float log_b = 0.0f;      // Logarithmic offset
+// static bool is_calibrated = false;
 
-static float tare_value = 0.0f;
+// Caractéristiques de l'ADC de l'ESP32 (à vérifier selon la configuration)
+#define ADC_RESOLUTION_BITS 12      // Résolution typique (0 à 4095)
+#define ADC_MAX_VALUE       4095.0  // 2^12 - 1
+#define V_REF               5     // Tension de référence (V) du CAN (peut être différente si un atténuateur est utilisé)
+
+// Caractéristiques du circuit et de la jauge
+#define V_SUPPLY            4.8         // Tension d'alimentation du pont diviseur (V)
+#define R_M                 10000.0  // Résistance fixe Rm (10 kOhms)
+
+// Coefficients de la jauge (ajustés en calibration 4.4.1)
+// Équation : Rjauge = a * Force^(-b)
+static float CALIBRATION_COEF_A = 10000.0;
+static float CALIBRATION_COEF_B = 0.7;
+
+// Offset (enregistré en calibration 4.4.2 et stocké en mémoire non volatile)
+static float CALIBRATION_OFFSET_G = 0.0; // Mesure en grammes correspondant à 0g réel
+
+static float last_value = 0.0f;
 
 void pressure_init(pressure_t *pressure, uint8_t id, QueueHandle_t msg_q_sensor)
 {
@@ -55,112 +72,90 @@ int pressure_read_raw(void)
     return raw; // 0–4095
 }
 
-float pressure_read_voltage(void)
-{
-    int raw = pressure_read_raw();
-    uint32_t mv = esp_adc_cal_raw_to_voltage(raw, &adc_chars);
-    return mv / 1000.0f;
-}
+// float pressure_read_voltage(void)
+// {
+//     int raw = pressure_read_raw();
+//     uint32_t mv = esp_adc_cal_raw_to_voltage(raw, &adc_chars);
+//     return mv / 1000.0f;
+// }
 
 void pressure_tare(void)
 {
-    float v = pressure_read_voltage();
-    if (!is_calibrated || v <= 0.0f)
-    {
-        tare_value = 0.0f;
-        return;
-    }
-    tare_value = log_a * logf(v) + log_b;
+    CALIBRATION_OFFSET_G = last_value;
 }
 
-void pressure_calibrate(float v_50g, float v_100g, float v_500g, float v_1000g)
-{
-    // Logarithmic calibration with 4 points using least squares
-    // weight = a * ln(voltage) + b
+// void pressure_calibrate(float v_50g, float v_100g, float v_500g, float v_1000g)
+// {
+//     // Logarithmic calibration with 4 points using least squares
+//     // weight = a * ln(voltage) + b
 
-    // Calibration points
-    float weights[4] = {50.0f, 100.0f, 500.0f, 1000.0f};
-    float voltages[4] = {v_50g, v_100g, v_500g, v_1000g};
+//     // Calibration points
+//     float weights[4] = {50.0f, 100.0f, 500.0f, 1000.0f};
+//     float voltages[4] = {v_50g, v_100g, v_500g, v_1000g};
 
-    float sum_ln_v = 0.0f;
-    float sum_w = 0.0f;
-    float sum_ln_v_sq = 0.0f;
-    float sum_w_ln_v = 0.0f;
+//     float sum_ln_v = 0.0f;
+//     float sum_w = 0.0f;
+//     float sum_ln_v_sq = 0.0f;
+//     float sum_w_ln_v = 0.0f;
 
-    // Calculate sums for least squares
-    for (int i = 0; i < 4; i++)
-    {
-        if (voltages[i] <= 0.0f)
-            return;
+//     // Calculate sums for least squares
+//     for (int i = 0; i < 4; i++)
+//     {
+//         if (voltages[i] <= 0.0f)
+//             return;
 
-        float ln_v = logf(voltages[i]);
-        sum_ln_v += ln_v;
-        sum_w += weights[i];
-        sum_ln_v_sq += ln_v * ln_v;
-        sum_w_ln_v += weights[i] * ln_v;
-    }
+//         float ln_v = logf(voltages[i]);
+//         sum_ln_v += ln_v;
+//         sum_w += weights[i];
+//         sum_ln_v_sq += ln_v * ln_v;
+//         sum_w_ln_v += weights[i] * ln_v;
+//     }
 
-    // Least squares formulas
-    float denominator = (4.0f * sum_ln_v_sq) - (sum_ln_v * sum_ln_v);
+//     // Least squares formulas
+//     float denominator = (4.0f * sum_ln_v_sq) - (sum_ln_v * sum_ln_v);
 
-    if (denominator != 0.0f)
-    {
-        log_a = ((4.0f * sum_w_ln_v) - (sum_w * sum_ln_v)) / denominator;
-        log_b = (sum_w - (log_a * sum_ln_v)) / 4.0f;
-        is_calibrated = true;
-    }
-}
+//     if (denominator != 0.0f)
+//     {
+//         log_a = ((4.0f * sum_w_ln_v) - (sum_w * sum_ln_v)) / denominator;
+//         log_b = (sum_w - (log_a * sum_ln_v)) / 4.0f;
+//         is_calibrated = true;
+//     }
+// }
 
-float pressure_read_weight(void)
-{
-    float v = pressure_read_voltage();
+// float pressure_read_weight(void)
+// {
+//     float v = pressure_read_voltage();
     
-    if (!is_calibrated || v <= 0.0f)
-    {
-        return 0.0f;
-    }
+//     if (!is_calibrated || v <= 0.0f)
+//     {
+//         return 0.0f;
+//     }
     
-    // weight = a * ln(v) + b
-    float weight = log_a * logf(v) + log_b - tare_value;
+//     // weight = a * ln(v) + b
+//     float weight = log_a * logf(v) + log_b - tare_value;
     
-    if (weight < 0.0f)
-        weight = 0.0f;
-    if (weight > 5000.0f)
-        weight = 5000.0f;
-    return weight;
-}
+//     if (weight < 0.0f)
+//         weight = 0.0f;
+//     if (weight > 5000.0f)
+//         weight = 5000.0f;
+//     return weight;
+// }
 
-static int32_t mean(int32_t *arr, size_t len)
-{
-    int64_t sum = 0;
-    for (size_t i = 0; i < len; i++)
-    {
-        sum += arr[i];
-    }
-    return (int32_t)(sum / len);
-}
+// static int32_t mean(int32_t *arr, size_t len)
+// {
+//     int64_t sum = 0;
+//     for (size_t i = 0; i < len; i++)
+//     {
+//         sum += arr[i];
+//     }
+//     return (int32_t)(sum / len);
+// }
 
 // ====================================================================
 // CONSTANTES DU SYSTEME ET COEFFICIENTS DE CALIBRATION
 // Ces valeurs doivent être ajustées après la phase de calibration (Mode 4.4)
 // ====================================================================
 
-// Caractéristiques de l'ADC de l'ESP32 (à vérifier selon la configuration)
-#define ADC_RESOLUTION_BITS 12      // Résolution typique (0 à 4095)
-#define ADC_MAX_VALUE       4095.0  // 2^12 - 1
-#define V_REF               5     // Tension de référence (V) du CAN (peut être différente si un atténuateur est utilisé)
-
-// Caractéristiques du circuit et de la jauge
-#define V_SUPPLY            4.8         // Tension d'alimentation du pont diviseur (V)
-#define R_M                 10000.0  // Résistance fixe Rm (10 kOhms)
-
-// Coefficients de la jauge (ajustés en calibration 4.4.1)
-// Équation : Rjauge = a * Force^(-b)
-float CALIBRATION_COEF_A = 10000.0;
-float CALIBRATION_COEF_B = 0.7;
-
-// Offset (enregistré en calibration 4.4.2 et stocké en mémoire non volatile)
-float CALIBRATION_OFFSET_G = 0.0; // Mesure en grammes correspondant à 0g réel
 
 // ====================================================================
 // FONCTIONS DE CALCUL
@@ -245,13 +240,13 @@ float get_final_weight_g(int32_t current_adc_readings[]) {
     
     // 3. APPLICATION DE L'OFFSET
     // Si la valeur est négative après soustraction de l'offset, on suppose 0g.
-    float final_weight = weight_brut - CALIBRATION_OFFSET_G;
+    float final_weight = weight_brut * 100 - CALIBRATION_OFFSET_G;
     
     if (final_weight < 0.0) {
         final_weight = 0.0;
     }
     
-    return final_weight * 100;
+    return final_weight;
 }
 
 // ====================================================================
@@ -300,6 +295,7 @@ void pressure_task(void *args)
         {
             float weight = (float)get_final_weight_g(values);
             printf("Weight: %.2f g\n", weight);
+            last_value = weight;
             msg.id = pressure->id;
             msg.value = (uint32_t)weight;
             xQueueSend(pressure->msg_q_sensor, &msg, portMAX_DELAY);
