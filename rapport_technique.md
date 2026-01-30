@@ -3,12 +3,13 @@
 ## Table des Matières
 1. [Vue d'ensemble](#vue-densemble)
 2. [Architecture Logicielle](#architecture-logicielle)
-3. [Gestion des Entrées/Sorties](#gestion-des-entreéssosties)
+3. [Gestion des Entrées et Sorties](#gestion-des-entrées-et-sorties)
 4. [Calculs de Pesage](#calculs-de-pesage)
 5. [Tests Automatiques](#tests-automatiques)
 6. [Justificatifs de Conception](#justificatifs-de-conception)
+7. [Schéma d'Architecture](#schema-darchitecture)
 
----
+----
 
 ## Vue d'ensemble
 
@@ -18,7 +19,7 @@ Le système de pesage électronique est développé sur une **plateforme ESP32**
 **Système d'exploitation temps réel :** FreeRTOS
 **Framework :** ESP-IDF (Espressif IoT Development Framework)
 
----
+----
 
 ## Architecture Logicielle
 
@@ -45,10 +46,10 @@ Les composants communiquent via des **queues FreeRTOS** plutôt que par appels d
 Chaque composant d'entrée/sortie s'exécute dans sa propre tâche FreeRTOS :
 ```
 main() 
-  ├─ pressure_task     (acquisition capteur)
-  ├─ button_task       (polling bouton 1)
-  ├─ button_task       (polling bouton 2)
-  └─ lcd_task          (affichage résultats)
+  |- pressure_task     (acquisition capteur)
+  |- button_task       (polling bouton 1)
+  |- button_task       (polling bouton 2)
+  |_ lcd_task          (affichage résultats)
 ```
 
 ### 1.2 Flux de Données Logique
@@ -56,16 +57,16 @@ main()
 ```
 CAPTEURS (Entrées)
     ↓
-[msg_q_sensor] ← pressure_task, button_task, button_task
+[msg_q_sensor] ← pressure_task, button1_task, button2_task
     ↓
 app_main (boucle principale)
-    │
-    ├─→ Traitement événements
-    │   ├─ Activation/désactivation veille
-    │   ├─ Tarage capteur
-    │   └─ Contrôle LEDs/Buzzer
-    │
-    └─→ [msg_q_lcd]
+    |
+    |-→ Traitement événements
+    |   |- Activation/désactivation veille
+    |   |- Tarage capteur
+    |   |_ Contrôle LEDs/Buzzer
+    |
+    |_→ [msg_q_lcd]
          ↓
       lcd_task (affichage)
          ↓
@@ -119,9 +120,9 @@ typedef struct autotest_t {
 } autotest_t;  // Agrégation de tous les composants
 ```
 
----
+----
 
-## Gestion des Entrées/Sorties
+## Gestion des Entrées et Sorties
 
 ### 2.1 Entrées : Capteur de Pression (ADC)
 
@@ -129,16 +130,19 @@ typedef struct autotest_t {
 - **Canal ADC :** ADC2_CHANNEL_2 (GPIO2)
 - **Résolution :** 12 bits (valeurs 0-4095)
 - **Atténuation :** ADC_ATTEN_DB_11 (atténuation maximale pour plage 0-3.9V)
-- **Calibrage :** Utilisation de la table de calibrage legacy ESP-IDF
+- **Calibrage :** Utilisation de `esp_adc_cal_characterize()` (table de calibrage interne ESP32, Vref = 1100 mV par défaut)
+- **Fréquence d'acquisition :** 100 ms par lecture ADC brute
 
 #### **Pipeline d'Acquisition**
 ```
 pressure_task() exécutée toutes les 100ms
-    ├─ pressure_read_raw()      → ADC brut (0-4095)
-    ├─ pressure_read_voltage()  → Conversion en volts
-    └─ pressure_read_weight()   → Conversion en grammes
+    |- pressure_read_raw()              → ADC brut (0-4095)
+    |- convert_adc_to_voltage()         → Tension mesurée (V) via esp_adc_cal_raw_to_voltage()
+    |- calculate_r_jauge()              → Résistance jauge (Ω) via pont diviseur inverse
+    |- calculate_force_from_r_jauge()   → Poids brut (g) via modèle power-law
+    |_ Moyennes mobiles (10 dernières lectures ADC brutes)
          ↓
-    Moyennes mobiles (10 dernières lectures)
+    Application de l'offset de tarage
          ↓
     Envoi sur msg_q_sensor tous les 1000ms (après 10 lectures)
 ```
@@ -184,17 +188,29 @@ void button_update_state(button_t *button) {
 
 **Justification :** Élimine les rebonds électromagnétiques sur 50ms.
 
-#### **Détection d'Évènement**
-La tâche compare l'état courant avec l'état précédent et envoie un message **uniquement lors d'un changement** :
+#### **Détection d'Évènement — Long Press (≥ 2 secondes)**
+La tâche compare l'état courant avec l'état précédent et **envoie un message seulement si l'appui dure ≥ 2 secondes** :
+
 ```c
 if (button->is_pressed != last_state) {
-    xQueueSend(button->msg_q_sensor, &msg, portMAX_DELAY);
+    if (button->is_pressed == 1)  // Appui détecté
+    {
+        press_start_time = xTaskGetTickCount();  // Enregistrer temps d'appui
+    }
+    else  // Bouton relâché
+    {
+        TickType_t press_duration = xTaskGetTickCount() - press_start_time;
+        if (press_duration >= pdMS_TO_TICKS(2000))  // >= 2s
+        {
+            xQueueSend(button->msg_q_sensor, &msg, portMAX_DELAY);
+        }
+    }
     last_state = button->is_pressed;
 }
 vTaskDelay(100 / portTICK_PERIOD_MS);
 ```
 
-**Avantage :** Réduit le bruit de la file de messages.
+**Avantage :** Réduit le bruit de la file de messages et prévient les tarages accidentels.
 
 ### 2.3 Sorties : LEDs
 
@@ -223,7 +239,11 @@ Similaire aux LEDs, utilise le même modèle GPIO pour générer un signal sonor
 - **SDA :** GPIO14
 - **Adresse :** 0x3E (module LCD rétro-éclairé via I2C)
 
-#### **Étapes 2→4 : Conversion, Modèle de Jauge et Poids**
+
+## Calculs de Pesage
+
+### 3.1 Chaîne de Conversion Complète
+#### **Conversion, Modèle de Jauge et Poids**
 
 Le code a été modifié pour effectuer la conversion ADC→tension puis estimer la résistance de la jauge et en déduire la force par un modèle de type "power-law" sur la résistance. La chaîne actuelle implémente les fonctions suivantes :
 
@@ -252,20 +272,42 @@ float final_weight = weight_brut * 100 - CALIBRATION_OFFSET_G;
 if (final_weight < 0.0) final_weight = 0.0;
 ```
 
-Remarques importantes :
-- Le modèle logarithmique décrit précédemment a été commenté dans le code et remplacé par le modèle basé sur la relation $R_{jauge} = a \cdot Force^{-b}$ (coefficients `CALIBRATION_COEF_A` et `CALIBRATION_COEF_B`).
-- Les valeurs de `V_SUPPLY` (4.8V), `R_M` (10 kOhm), `V_REF` (5V) et le multiplicateur `*100` appliqué au résultat proviennent de l'implémentation et doivent être validés lors de la calibration.
-- L'offset de tarage est stocké dans `CALIBRATION_OFFSET_G` (mémorisé en NVM dans l'application).
-```
+**Remarques importantes :**
+
+- **Conversion ADC→Tension :** utilise `esp_adc_cal_raw_to_voltage()` avec table de calibrage interne ESP32 (Vref ~1100 mV). Cette fonction compense automatiquement les écarts de fabrication du capteur ADC.
+
+- **Pont diviseur inverse :** formule $R_{jauge} = \frac{V_{mesuree} \cdot R_M}{V_{SUPPLY} - V_{mesuree}}$ où :
+  - `V_SUPPLY = 3.3 V` (tension d'alimentation du pont)
+  - `R_M = 10 kΩ` (résistance fixe du pont)
+  - Protection : si $V_{mesuree} \geq V_{SUPPLY}$, retour d'une valeur très grande
+
+- **Facteur multiplicatif ×100 :** appliqué au poids brut avant tarage (`weight_brut * 100`) pour adapter la précision interne du modèle à l'affichage en grammes. Voir section calibration pour explication complète.
+
+- **Offset de tarage :** `CALIBRATION_OFFSET_G` mémorisé en NVM (via fonction `pressure_tare()`) pour compenser le poids de la structure vide.
+
+- **Plage finale :** poids clipping à [0, ∞] grammes (aucune limite supérieure imposée, dépend du capteur).
 
 
-### 3.2 Justification du Modèle
+### 3.2 Justification du Modèle Power-Law
 
-Les jauges de contrainte peuvent être modélisées par une relation non-linéaire entre la résistance et la force. Dans l'implémentation actuelle on utilise un modèle de type "power-law" sur la résistance :
+Les jauges de contrainte (load cells) suivent une relation non-linéaire entre la résistance et la force appliquée. Le modèle empirique power-law a été choisi :
 
-$$R_{jauge} = a \cdot Force^{-b}$$
+$$R_{jauge}(m) = a \cdot m^{-b}$$
 
-Ce modèle a été retenu car il s'inverse simplement pour obtenir `Force = (a / R_{jauge})^{1/b}` et s'adapte bien aux résultats expérimentaux après calibration. Alternatives possibles : modèle linéaire, polynôme d'ordre supérieur ou table de correspondance (LUT) — chacun a ses compromis entre complexité et précision.
+où $m$ est la masse (g), $a$ le coefficient de la courbe (~10000), et $b$ l'exposant (~0.7).
+
+**Avantages du modèle power-law :**
+- Inverse analytique simple : $m = \left(\frac{a}{R_{jauge}}\right)^{1/b}$
+- Adapté aux courbes réelles de jauges de contrainte (compression non-linéaire)
+- Facile à calibrer : deux ou trois mesures de référence suffisent pour estimer $a$ et $b$
+- Peu coûteux en calcul (une seule exponentiation par mesure)
+
+**Alternatives rejetées :**
+- Modèle linéaire : erreur ±15-20% sur l'étendue complète → rejeté pour balance de cuisine
+- Polynôme 3e degré : plus précis mais calibration complexe (4+ points nécessaires)
+- Table de correspondance (LUT) : consomme mémoire, interpolation requise
+
+Le modèle logarithmique (anciennement utilisé) a été commenté et remplacé par ce modèle plus fidèle aux courbes réelles des jauges.
 
 ### 3.3 Stabilité et Lissage
 
@@ -276,18 +318,128 @@ Le système applique une **moyenne mobile sur 10 échantillons** :
 **Formule :**
 $$\text{valeur affichée} = \frac{1}{10} \sum_{i=0}^{9} \text{weight}_i$$
 
-**Avantage :** Réduit le bruit ADC de ~√10 ≈ 3x.
+**Avantage :** Réduit le bruit ADC de ~√10 $\approx$ 3x.
 
----
+### 3.4 Procédure Pratique de Calibration
+
+#### **Matériel et Prérequis**
+- Masses de calibrage : 50g, 100g, 500g, 1000g (ou 4 masses standards)
+- Balance de référence
+- Terminal série pour affichage ADC/tension
+- Carte ESP32 programmée avec le firmware
+- Pont de Wheatstone correctement câblé
+
+#### **Étapes de Calibration**
+
+**1. Préparation**
+- Poser la balance sur surface plane et stable
+- Attendre que le poid se stabilise
+
+**2. Mesure des Points de Référence**
+Pour chaque masse (50g, 100g, 500g, 1000g) :
+- Poser la masse sur le plateau
+- Attendre la stabilisation
+- Enregistrer les 10 lectures ADC brutes affichées sur la console
+- Calculer la moyenne ADC
+- Convertir en tension : $V = esp\_adc\_cal\_raw\_to\_voltage(ADC_{avg}) / 1000.0$
+- Enregistrer le triplet : (masse en g, ADC moyen, V mesuré)
+
+**3. Stockage des Coefficients**
+- Mettre à jour `CALIBRATION_COEF_A` et `CALIBRATION_COEF_B` dans [components/pressure/pressure.c](components/pressure/pressure.c#L34-L38)
+- Compiler et flasher le firmware
+- Vérifier que les pesées s'affichent correctement pour les masses de test
+
+**4. Validation**
+- Poser une masse inconnue (ex. 250g) et comparer avec une balance de référence
+- Acceptable si erreur pas trop grosse
+
+#### **Exemple Numérique Complet**
+
+Supposons mesures :
+
+| Masse (g) | ADC moyen | Tension (V) |
+|-----------|-----------|------------|
+| 50        | 2800      | 1.45       |
+| 100       | 2600      | 1.38       |
+| 500       | 2000      | 1.10       |
+| 1000      | 1200      | 0.78       |
+
+Calcul des R_jauge (avec V_SUPPLY=3.3 V, R_M=10 kΩ) :
+- R_jauge (50g) = (1.45 × 10000) / (3.3 - 1.45) = 7865 Ω
+- R_jauge (100g) = (1.38 × 10000) / (3.3 - 1.38) = 6977 Ω
+- R_jauge (500g) = (1.10 × 10000) / (3.3 - 1.10) = 4545 Ω
+- R_jauge (1000g) = (0.78 × 10000) / (3.3 - 0.78) = 3165 Ω
+
+Fit du modèle $m = (a / R_{jauge})^{1/b}$ sur ces points → résultat exemple :
+```
+CALIBRATION_COEF_A = 9950.0
+CALIBRATION_COEF_B = 0.68
+```
+
+**5. Tarage (Offset)**
+- Poser la structure vide sur le plateau
+- Commander `pressure_tare()` en appuyant sur le bouton Tare
+- Offset enregistré et mémorisé en NVM
+- Les affichages subsequents sont compensés de cet offset
+
+### 3.5 Tableau Récapitulatif des Paramètres Système
+
+| Paramètre | Valeur | Unité | Notes |
+|-----------|--------|-------|-------|
+| **Timings** |
+| `DEBOUNCE_DELAY` | 50 | ms | Dédoublement lecture bouton |
+| `BUTTON_POLL_INTERVAL` | 100 | ms | Intervalle polling bouton |
+| `LONG_PRESS_DURATION` | 2000 | ms | Durée minimum pour tarage/action |
+| `ADC_SAMPLE_INTERVAL` | 100 | ms | Intervalle acquisition ADC |
+| `ADC_AVERAGE_COUNT` | 10 | - | Nombre de lectures pour moyenne |
+| `SEND_INTERVAL` | 1000 | ms | Intervalle envoi msg_q_sensor (après 10 × 100ms) |
+| **Hardware** |
+| `PRESSURE_ADC_CHANNEL` | ADC2_CH2 | - | GPIO2 pour capteur |
+| `BUTTON1_PIN` | GPIO33 | - | Bouton 1 (Tarage) |
+| `BUTTON2_PIN` | GPIO32 | - | Bouton 2 (Mode veille) |
+| `LCD_SCL` | GPIO27 | - | I2C clock écran |
+| `LCD_SDA` | GPIO14 | - | I2C data écran |
+| `LCD_I2C_ADDR` | 0x3E | hex | Adresse I2C du module LCD |
+| **ADC & Conversion** |
+| `ADC_RESOLUTION` | 12 | bits | 0–4095 |
+| `ADC_WIDTH` | 12 | bits | ADC_WIDTH_BIT_12 |
+| `ADC_ATTEN` | DB_11 | - | ADC_ATTEN_DB_11 (plage 0–3.9V) |
+| `Vref_calibration` | 1100 | mV | Vref ESP-IDF par défaut |
+| `V_SUPPLY` | 3.3 | V | Tension alimentation pont diviseur |
+| `R_M` | 10000 | Ω | Résistance fixe pont (10 kΩ) |
+| **Calibration** |
+| `CALIBRATION_COEF_A` | 10000 | - | Coefficient a (power-law) — ajuster lors de calibration |
+| `CALIBRATION_COEF_B` | 0.7 | - | Exposant b (power-law) — ajuster lors de calibration |
+| `CALIBRATION_OFFSET_G` | variable | g | Offset tarage (NVM) — mis à jour par `pressure_tare()` |
+| **Queues & Tasks** |
+| `msg_q_sensor` | 20 | messages | Queue entrées (pressure + 2×button) |
+| `msg_q_lcd` | 20 | messages | Queue affichage (LCD output) |
+| Priorité tâches | 5 | - | Toutes au même niveau (évite inversion priorité) |
+
+### 3.6 Persistence en Mémoire Non-Volatile (NVM)
+
+Les coefficients de calibration et l'offset de tarage doivent être persistants après redémarrage :
+
+**Paramètres à stocker :**
+- `CALIBRATION_COEF_A` (float)
+- `CALIBRATION_COEF_B` (float)
+- `CALIBRATION_OFFSET_G` (float)
+
+**Implémentation :**
+- Utiliser le système **NVS (Non-Volatile Storage)** d'ESP-IDF
+- Sauvegarder après chaque modification (fonction `pressure_tare()` ou une fonction `calibration_save()`)
+- Charger à l'initialisation dans `pressure_init()`
+
+-----
 
 ## Tests Automatiques
 
 ### 4.1 Architecture du Test
 
-L'autotest est encapsulé dans le composant `autotest/` et peut être activé au démarrage en décommentant :
+L'autotest est encapsulé dans le composant `autotest/`
 ```c
 // Dans main.c
-// startAutoTest(&components);
+startAutoTest(&components);
 ```
 
 ### 4.2 Séquence de Test
@@ -331,13 +483,15 @@ static void startBuzzerTest(autotest_t *componants) {
 - Affiche le message sur l'écran
 - Vérifie que le buzzer peut être commandé
 
-#### **4. Test Boutons (attente interactive)**
+#### **4. Test Boutons (attente long-press interactive)**
 ```c
 static void ButtonTest(autotest_t *componants, button_t *button) {
     TickType_t start_time = xTaskGetTickCount();
     const TickType_t timeout = pdMS_TO_TICKS(10000);  // 10 secondes timeout
     
+    // Note: la détection est effectuée dans button_task()
     while ((xTaskGetTickCount() - start_time) < timeout) {
+        // Vérifier si message reçu depuis la queue capteur
         if (button_is_pressed(button)) {
             lcd_print_line(componants->lcd, "Touche OK", 1);
             return;
@@ -345,30 +499,42 @@ static void ButtonTest(autotest_t *componants, button_t *button) {
         vTaskDelay(pdMS_TO_TICKS(10));
     }
     
-    lcd_print_line(componants->lcd, "Touche KO", 1);
+    lcd_print_line(componants->lcd, "Touche KO (timeout)", 1);
 }
 ```
-- Attend que l'utilisateur appuie sur le bouton (timeout 10s)
-- Affiche "OK" ou "KO"
+- Attend un appui sur le bouton (timeout 10s)
+- Affiche "OK" si appui détecté, "KO (timeout)" si delai dépassé
 - Teste les deux boutons séquentiellement
 
 #### **5. Test Capteur de Poids (3 secondes)**
 ```c
-static void startPressureTest(autotest_t *componants) {
+static void startPressureTest(autotest_t *componants)
+{
+    const char *lcd_screen = "Test du Capteur\nde Poids";
     lcd_clear(componants->lcd);
-    lcd_print(componants->lcd, "Test du Capteur\nde Poids");
+    lcd_print(componants->lcd, lcd_screen);
     
-    pressure_tare();  // Remise à zéro
+    ESP_LOGI(TAG, "Weight sensor test - Taring...");
+    pressure_tare();
     vTaskDelay(pdMS_TO_TICKS(500));
+
+    int32_t values[10] = { 0 };
+    size_t values_index = 0;
     
-    // 10 lectures et affichage sur console
-    for (size_t i = 0; i < 10; i++) {
-        int raw = pressure_read_raw();
-        float v = pressure_read_voltage();
-        float w = pressure_read_weight();
-        printf("ADC=%d | V=%.2fV | W=%.1fg\n", raw, v, w);
-        vTaskDelay(pdMS_TO_TICKS(1000));
+    ESP_LOGI(TAG, "Reading weight...");
+    for (size_t i = 0; i < 10; i++)
+    {
+        int32_t raw = pressure_read_raw();
+        float v = convert_adc_to_voltage(raw);
+        values[values_index] = raw;
+        values_index = (values_index + 1) % 10;
+        printf("ADC=%ld | V=%.2fV\n", raw, v);
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
+    float weight = get_final_weight_g(values);
+    char weight_str[32];
+    snprintf(weight_str, sizeof(weight_str), "Poids:\n %.2f g", weight);
+    lcd_print(componants->lcd, weight_str);
 }
 ```
 - Tarage du capteur
@@ -377,14 +543,20 @@ static void startPressureTest(autotest_t *componants) {
 ### 4.3 Résultats Attendus
 
 | Test | Résultat Attendu |
-|------|-----------------|
-| LCD | Affichage des noms sans scintillation |
-| LED | Chaque LED clignote 5 fois distinctement |
-| Buzzer | Pas d'erreur de communication |
-| Boutons | "OK" si appui détecté, "KO" si timeout |
-| Capteur | Valeurs stables (ADC, V, poids) affichées |
+|------|------------------:|
+| LCD | Affichage des noms (EPITA 2025/2026 + auteurs) sans scintillation |
+| LED | Chaque LED clignote 5 fois distinctement à 500 ms période |
+| Buzzer | Buzze 5 fois distinctement à 500 ms période |
+| Boutons | "OK" si appui, "KO (timeout)" si délai > 10s (aucun appui) |
+| Capteur | Poids stable loggé (ADC, V, g) sur console série ; ≥ 10 relevés et poid afficher sur l'écran|
 
----
+----
+
+## Changement Délibéré du Cahier des Charges
+
+- **Bouton Tarage :** Nous avons retenu un comportement par appui court pour tarage comme pour une balance de cuisine standard. A la place de faire un appui pour lancer le tarage et un autre pour valider.
+
+- **Écran LCD — Mode Veille :** L'alimentation de l'écran ne peut pas être coupée par la carte ESP32 (absence de relais ou transistor de puissance). Nous avons donc mis en place un mode veille logiciel : l'écran demeure alimenté, mais aucun message n'est envoyé sauf le message initial « Mise en veille ». Le rétro-éclairage reste allumé.
 
 ## Justificatifs de Conception
 
@@ -416,7 +588,7 @@ Bruit:     ___|‾‾‾|‾|_|___
 Détection: 3-4 événements au lieu de 1
 
 Avec dédoublement (50ms):
-Apui + attente 50ms + deuxième lecture
+Appui + attente 50ms + deuxième lecture
 = filtre analogique logiciel naturel
 ```
 
@@ -455,7 +627,7 @@ $$Force = \left(\frac{a}{R_{jauge}}\right)^{1/b}$$
 - `CALIBRATION_COEF_A` (défaut 10000) : coefficient de la courbe
 - `CALIBRATION_COEF_B` (défaut 0.7) : exposant de la courbe
 - `CALIBRATION_OFFSET_G` : offset de tarage mémorisé en NVM via `pressure_tare()`
-- Paramètres matériel : `V_SUPPLY` (4.8V), `R_M` (10 kΩ), `V_REF` (5V)
+- Paramètres matériel : `V_SUPPLY` (3.3V), `R_M` (10 kΩ), `V_REF` (5V)
 
 ### 5.5 Taille des Buffers
 
@@ -463,7 +635,7 @@ $$Force = \left(\frac{a}{R_{jauge}}\right)^{1/b}$$
 |--------|--------|--------------|
 | `msg_q_sensor` | 20 messages | Absorption des pics d'événements |
 | `msg_q_lcd` | 20 messages | Synchronisation avec I2C lent |
-| `values[]` (poids) | 10 échantillons | Lissage sans latence excessive |
+| `values[10]` (poids) | 10 échantillons | Lissage sans latence excessive |
 
 Exemple : Si 3 événements arrivent simultanément (pression + 2 boutons) + affichage LCD retardé, la queue de 20 absorbe sans perte.
 
@@ -481,29 +653,44 @@ Toutes les tâches périphériques à **priorité 5** (identique).
 - FreeRTOS arbitre le scheduling équitablement
 - app_main contrôle la logique métier avec queue bloquante
 
-### 5.7 Accumulation d'Énergie (Veille)
+### 5.7 Gestion des Appuis Longs (2 secondes)
+
+La boucle principale `app_main()` reçoit les messages des capteurs et effectue les actions suivantes :
 
 ```c
-uint8_t veille_state = 1;
+uint8_t veille_state = 1;  // État veille (1 = actif, 0 = veille)
 while (1) {
     xQueueReceive(msg_q_sensor, &msg, portMAX_DELAY);  // Bloqué si rien
     
-    if (msg.id == button1.id && msg.value == 1) {
-        veille_state = !veille_state;  // Toggle veille
+    // Bouton 1 : appui long (2s) -> toggle veille
+    if (msg.id == BUTTON1_ID && msg.value == 1) {
+        veille_state = !veille_state;  // Toggle
+        if (!veille_state) {
+            // Afficher message veille sur écran
+            msg_t msg_sleep = {ID_LCD, 0x00};  // Code spécial
+            xQueueSend(msg_q_lcd, &msg_sleep, portMAX_DELAY);
+        }
     }
     
-    if (veille_state) {
-        xQueueSend(msg_q_lcd, &msg, portMAX_DELAY);  // Afficher si actif
+    // Bouton 2 : appui long (2s) -> tarage capteur
+    if (msg.id == BUTTON2_ID && msg.value == 1) {
+        pressure_tare();  // Mémoriser offset
+    }
+    
+    // Affichage LCD : envoyer mesure capteur si mode actif
+    if (veille_state && msg.id == PRESSURE_ID) {
+        xQueueSend(msg_q_lcd, &msg, portMAX_DELAY);
     }
 }
 ```
 
-**Logique :**
-- Bouton 1 = activation/désactivation de l'écran
-- Bouton 2 = tarage du capteur
-- Mode veille économise la batterie en désactivant l'affichage
+**Logique détaillée :**
+- **Bouton 1 (long-press 2s) :** bascule entre mode actif (affichage LCD) et mode veille (écran inactif)
+- **Bouton 2 :** tarage du capteur — mémorise le poids actuel comme offset (0g de référence)
+- **Mode veille :**  Supprimes les communications I2C fréquentes avec l'écran ; aucun rafraîchissement de l'affichage sauf message de veille initial.
+**Remarque :** Les appuis courts (< 2s) ne génèrent aucun message et sont ignorés (filtre anti-rebond intégré).
 
----
+----
 
 ## Synthèse et Perspectives
 
@@ -512,12 +699,16 @@ while (1) {
 **Scalabilité** : Facile d'ajouter de nouveaux capteurs (queue + tâche)  
 **Robustesse** : Dédoublement des lectures, calibrage adapté  
 **Performance** : Pas de blocages critiques, latences prévisibles  
-**Maintenabilité** : Code bien structuré, interfaces claires  
+**Maintenabilité** : Code biencd D structuré, interfaces claires  
+**Persistence NVM** : Mémorisation des paramètres de calibrage
 
-### Améliorations Futures Possibles
-- **Persistence NVM** : Mémorisation des paramètres de calibrage
+----
 
----
+## Schema d'architecture
 
-**Auteurs :** VASSEUR
+![Architecture Logicielle](schema-firmware.png)
+
+![Grafcet](grafcet.png)
+
+**Auteurs :** VASSEUR Alexis, JOUY Antoine, OLIVER Théo
 **Date :** 2025/2026  

@@ -152,12 +152,16 @@ void lcd_print_line(lcd_t *lcd, const char *str, uint8_t line)
 {
     _lock_acquire(&lcd->mutex);
     lcd_set_cursor(lcd, line, 0);
+    char c = str[0];
     for (size_t i = 0; i < 16; i++)
     {
-        char c = str[i];
         if (c == 0 || c == '\n')
         {
             c = ' ';
+        }
+        else
+        {
+            c = str[i];
         }
         lcd_data(c);
     }

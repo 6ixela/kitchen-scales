@@ -38,7 +38,7 @@ static void startBuzzerTest(autotest_t *componants)
     lcd_set_cursor(componants->lcd, 0, 0);
     lcd_print(componants->lcd, lcd_screen);
     buzzer_off(componants->buzzer);
-    // buzzer_blink(componants->buzzer, 5, 500);
+    buzzer_blink(componants->buzzer, 5, 500);
     ESP_LOGI(TAG, "Buzzer test");
 }
 
@@ -62,14 +62,15 @@ static void ButtonTest(autotest_t *componants, button_t *button)
     if (is_pressed)
     {
         ESP_LOGI(TAG, "Touche OK");
-        lcd_print_line(componants->lcd, "Touche OK", 1);
+        lcd_print_line(componants->lcd, "Touche OK       ", 1);
     }
     else
     {
         ESP_LOGI(TAG, "Touche KO");
         lcd_set_cursor(componants->lcd, 0, 0);
-        lcd_print_line(componants->lcd, "Touche KO", 1);
+        lcd_print_line(componants->lcd, "Touche KO       ", 1);
     }
+    button->is_pressed = 0;
 }
 
 static void startButtonTest(autotest_t *componants)
@@ -77,6 +78,7 @@ static void startButtonTest(autotest_t *componants)
     const char *lcd_button = "Button1 test";
     lcd_print(componants->lcd, lcd_button);
     ButtonTest(componants, componants->button1);
+    vTaskDelay(pdMS_TO_TICKS(1000));
     lcd_button = "Button2 test";
     lcd_print(componants->lcd, lcd_button);
     ButtonTest(componants, componants->button2);
@@ -91,17 +93,24 @@ static void startPressureTest(autotest_t *componants)
     ESP_LOGI(TAG, "Weight sensor test - Taring...");
     pressure_tare();  // Zero reference at current weight
     vTaskDelay(pdMS_TO_TICKS(500));
+
+    int32_t values[10] = { 0 };
+    size_t values_index = 0;
     
     ESP_LOGI(TAG, "Reading weight...");
     for (size_t i = 0; i < 10; i++)
     {
-        int raw = pressure_read_raw();
-        float v = pressure_read_voltage();
-        float w = pressure_read_weight();
-    
-        printf("ADC=%d | V=%.2fV | W=%.1fg\n", raw, v, w);
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        int32_t raw = pressure_read_raw();
+        float v = convert_adc_to_voltage(raw);
+        values[values_index] = raw;
+        values_index = (values_index + 1) % 10;
+        printf("ADC=%ld | V=%.2fV\n", raw, v);
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
+    float weight = get_final_weight_g(values);
+    char weight_str[32];
+    snprintf(weight_str, sizeof(weight_str), "Poids:\n %.2f g", weight);
+    lcd_print(componants->lcd, weight_str);
 }
 
 void startAutoTest(autotest_t *componants)

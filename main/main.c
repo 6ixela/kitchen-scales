@@ -47,7 +47,7 @@ void app_main(void)
         .pressure = &pressure_sensor,
     };
 
-    // startAutoTest(&componants);
+    startAutoTest(&componants);
     xTaskCreate(lcd_task, "lcd_task", 2048, &lcd, 5, NULL);
     xTaskCreate(button_task, "button1_task", 2048, &button1, 5, NULL);
     xTaskCreate(button_task, "button2_task", 2048, &button2, 5, NULL);
