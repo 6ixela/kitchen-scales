@@ -1,0 +1,74 @@
+#include "led.h"
+
+#include <sys/lock.h>
+
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+#define OFF 0
+#define ON 1
+
+static const char *TAG = "Led";
+
+void led_init(led_t *led, gpio_num_t pin, uint8_t id)
+{
+    led->id = id;
+    led->pin = pin;
+    led->state = OFF;
+    gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+    _lock_init(&led->mutex);
+}
+
+void led_on(led_t *led)
+{
+    _lock_acquire(&led->mutex);
+    led->state = ON;
+    gpio_set_level(led->pin, ON);
+    _lock_release(&led->mutex);
+}
+
+void led_off(led_t *led)
+{
+    _lock_acquire(&led->mutex);
+    led->state = OFF;
+    gpio_set_level(led->pin, OFF);
+    _lock_release(&led->mutex);
+}
+
+void led_toggle(led_t *led)
+{
+    _lock_acquire(&led->mutex);
+    led->state = !led->state;
+    gpio_set_level(led->pin, led->state);
+    _lock_release(&led->mutex);
+}
+
+void led_set_state(led_t *led, uint8_t state)
+{
+    _lock_acquire(&led->mutex);
+    led->state = state;
+    gpio_set_level(led->pin, state);
+    _lock_release(&led->mutex);
+}
+
+uint8_t led_get_state(led_t *led)
+{
+    _lock_acquire(&led->mutex);
+    uint8_t state = led->state;
+    _lock_release(&led->mutex);
+    return state;
+}
+
+void led_blink(led_t *led, uint32_t times, uint32_t delay_ms)
+{
+    for (uint32_t i = 0; i < times; i++)
+    {
+        ESP_LOGI(TAG, "ON");
+        led_toggle(led);
+        vTaskDelay(delay_ms / portTICK_PERIOD_MS);
+        ESP_LOGI(TAG, "OFF");
+        led_toggle(led);
+        vTaskDelay(delay_ms / portTICK_PERIOD_MS);
+    }
+}

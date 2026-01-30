@@ -1,0 +1,31 @@
+#ifndef LCD_H
+#define LCD_H
+
+#include <driver/gpio.h>
+#include <sys/lock.h>
+#include <stdint.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+
+
+
+#define LCD_ROWS 2
+#define LCD_COLS 16
+
+typedef struct lcd_t
+{
+    uint8_t id;
+    _lock_t mutex;
+    QueueHandle_t msg_q_lcd;
+} lcd_t;
+
+void i2c_init(void);
+void lcd_set_cursor(lcd_t *lcd, uint8_t row, uint8_t col);
+void lcd_init(lcd_t *lcd, uint8_t id, QueueHandle_t msg_q_lcd);
+void lcd_clear(lcd_t *lcd);
+void lcd_print(lcd_t *lcd, const char *str);
+void lcd_defil_name(lcd_t *lcd, const char *top, const char *bottom);
+void lcd_task(void *args);
+void lcd_print_line(lcd_t *lcd, const char *str, uint8_t line);
+
+#endif /* LCD_H */
