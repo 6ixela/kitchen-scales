@@ -80,25 +80,4 @@ void app_main(void)
         }
         
     }
-    // while (1)
-    // {
-    //     // Update button state (debounced)
-    //     button_update_state(&button);
-
-    //     // If button is pressed, turn on buzzer and controlled LED
-    //     if (button_is_pressed(&button))
-    //     {
-    //         led_on(&led_controlled);
-    //     }
-    //     else
-    //     {
-    //         led_off(&led_controlled);
-    //     }
-
-    //     // Toggle the blinking LED
-    //     led_toggle(&led_blink);
-
-    //     // Delay for 500ms (blink every 500ms on, 500ms off)
-    //     vTaskDelay(500 / portTICK_PERIOD_MS);
-    // }
 }
