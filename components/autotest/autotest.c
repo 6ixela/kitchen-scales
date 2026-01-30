@@ -1,9 +1,10 @@
 #include "autotest.h"
 
+#include <stdint.h>
+
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include <stdint.h>
 
 #define SECONDS (1000 / portTICK_PERIOD_MS)
 
@@ -89,14 +90,14 @@ static void startPressureTest(autotest_t *componants)
     const char *lcd_screen = "Test du Capteur\nde Poids";
     lcd_clear(componants->lcd);
     lcd_print(componants->lcd, lcd_screen);
-    
+
     ESP_LOGI(TAG, "Weight sensor test - Taring...");
-    pressure_tare();  // Zero reference at current weight
+    pressure_tare(); // Zero reference at current weight
     vTaskDelay(pdMS_TO_TICKS(500));
 
     int32_t values[10] = { 0 };
     size_t values_index = 0;
-    
+
     ESP_LOGI(TAG, "Reading weight...");
     for (size_t i = 0; i < 10; i++)
     {

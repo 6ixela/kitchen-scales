@@ -2,12 +2,13 @@
 
 #include <sys/lock.h>
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
 #include "../../main/message.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
 
-void button_init(button_t *button, gpio_num_t pin, uint8_t id, QueueHandle_t msg_q_sensor)
+void button_init(button_t *button, gpio_num_t pin, uint8_t id,
+                 QueueHandle_t msg_q_sensor)
 {
     button->id = id;
     button->pin = pin;
@@ -38,18 +39,17 @@ uint8_t button_is_pressed(button_t *button)
     return pressed;
 }
 
-
 void button_task(void *args)
 {
     button_t *button = (button_t *)args;
     msg_t msg;
     uint8_t last_state = button->is_pressed;
     TickType_t press_start_time = 0;
-    const TickType_t LONG_PRESS_DURATION = pdMS_TO_TICKS(2000);  // 2 secondes
-    
+    const TickType_t LONG_PRESS_DURATION = pdMS_TO_TICKS(2000); // 2 secondes
+
     while (1)
     {
-        button_update_state(button);        
+        button_update_state(button);
         if (button->is_pressed != last_state)
         {
             msg.id = button->id;
@@ -61,11 +61,11 @@ void button_task(void *args)
             }
             else
             {
-                TickType_t press_duration = xTaskGetTickCount() - press_start_time;
-                
+                TickType_t press_duration =
+                    xTaskGetTickCount() - press_start_time;
+
                 if (press_duration >= LONG_PRESS_DURATION)
                 {
-                    
                     xQueueSend(button->msg_q_sensor, &msg, portMAX_DELAY);
                 }
             }

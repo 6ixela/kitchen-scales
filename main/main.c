@@ -51,7 +51,8 @@ void app_main(void)
     xTaskCreate(lcd_task, "lcd_task", 2048, &lcd, 5, NULL);
     xTaskCreate(button_task, "button1_task", 2048, &button1, 5, NULL);
     xTaskCreate(button_task, "button2_task", 2048, &button2, 5, NULL);
-    xTaskCreate(pressure_task, "pressure_task", 2048, &pressure_sensor, 5, NULL);
+    xTaskCreate(pressure_task, "pressure_task", 2048, &pressure_sensor, 5,
+                NULL);
     msg_t msg;
     uint8_t veille_state = 1;
     while (1)
@@ -78,6 +79,5 @@ void app_main(void)
         {
             xQueueSend(msg_q_lcd, &msg, portMAX_DELAY);
         }
-        
     }
 }

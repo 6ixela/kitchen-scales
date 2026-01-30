@@ -4,14 +4,13 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "../../main/message.h"
 #include "driver/gpio.h"
 #include "driver/i2c.h"
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "sys/lock.h"
-#include "esp_log.h"
-
-#include "../../main/message.h"
 
 #define I2C_MASTER_SCL_IO 27
 #define I2C_MASTER_SDA_IO 14
@@ -26,11 +25,7 @@
 
 static char lcd_buffer[LCD_ROWS * LCD_COLS];
 
-const char *to_print[] = {
-    "Pesage\ng",
-    "Mise en veille",
-    "Mode tarage"
-};
+const char *to_print[] = { "Pesage\ng", "Mise en veille", "Mode tarage" };
 
 void i2c_init(void)
 {
@@ -239,7 +234,8 @@ void lcd_task(void *args)
     {
         if (xQueueReceive(lcd->msg_q_lcd, &msg, portMAX_DELAY) == pdTRUE)
         {
-            ESP_LOGI("LCD", "Received message id: %d, value: %d", msg.id, msg.value);
+            ESP_LOGI("LCD", "Received message id: %d, value: %d", msg.id,
+                     msg.value);
             if (msg.id == 0)
             {
                 char buffer[32];
@@ -251,7 +247,7 @@ void lcd_task(void *args)
             else
             {
                 lcd_print(lcd, to_print[msg.id]);
-            }            
+            }
         }
     }
 }
